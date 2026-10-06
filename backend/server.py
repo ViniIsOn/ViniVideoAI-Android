@@ -51,11 +51,11 @@ def log_line(message):
         pass
 
 
-def set_job(job_id, **changes):
+def set_job(job_key, **changes):
     with JOBS_LOCK:
-        current = JOBS.get(job_id, {})
+        current = JOBS.get(job_key, {})
         current.update(changes)
-        JOBS[job_id] = current
+        JOBS[job_key] = current
 
 
 def get_job(job_id):

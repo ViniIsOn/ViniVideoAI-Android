@@ -10,7 +10,7 @@ from io import BytesIO
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -31,12 +31,24 @@ JOBS_LOCK = threading.Lock()
 MODEL_LOCK = threading.Lock()
 TEXT_PIPE = None
 IMAGE_PIPE = None
+LAST_ERROR = ""
+LOG_PATH = OUTPUT_DIR / "vinivideo-backend.log"
 
 
 def gpu_name():
     if not torch.cuda.is_available():
         return "CPU"
     return torch.cuda.get_device_name(0)
+
+
+def log_line(message):
+    line = str(message)
+    print(line, flush=True)
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 def set_job(job_id, **changes):
@@ -261,6 +273,9 @@ def run_generation(job_id, payload):
             pass
 
     except torch.cuda.OutOfMemoryError:
+        global LAST_ERROR
+        LAST_ERROR = "CUDA out of memory"
+        log_line(f"[{job_id}] CUDA out of memory")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         set_job(
@@ -271,6 +286,8 @@ def run_generation(job_id, payload):
             error="CUDA out of memory",
         )
     except Exception as exc:
+        LAST_ERROR = traceback.format_exc()[-4000:]
+        log_line(f"[{job_id}] {LAST_ERROR}")
         set_job(
             job_id,
             status="ERROR",
@@ -299,30 +316,54 @@ def health():
 
 
 @app.post("/api/v1/jobs")
-def create_job(payload: dict):
-    if not torch.cuda.is_available():
-        raise HTTPException(
-            status_code=503,
-            detail="CUDA não disponível. Ative uma GPU T4 no Colab.",
+def create_job(payload: dict, background_tasks: BackgroundTasks):
+    global LAST_ERROR
+    try:
+        if not torch.cuda.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail="CUDA não disponível. Ative uma GPU T4 no Colab.",
+            )
+
+        if payload.get("dry_run"):
+            return {
+                "job_id": "dry-run",
+                "status": "DONE",
+                "progress": 100,
+                "stage": "API pronta",
+                "output_url": "",
+            }
+
+        prompt = str(payload.get("prompt", "")).strip()
+        if not prompt:
+            raise HTTPException(
+                status_code=400,
+                detail="O prompt está vazio.",
+            )
+
+        job_id = uuid.uuid4().hex
+        set_job(
+            job_id,
+            job_id=job_id,
+            status="QUEUED",
+            progress=1,
+            stage="Na fila",
+            output_url="",
         )
 
-    job_id = uuid.uuid4().hex
-    set_job(
-        job_id,
-        job_id=job_id,
-        status="QUEUED",
-        progress=1,
-        stage="Na fila",
-        output_url="",
-    )
+        background_tasks.add_task(run_generation, job_id, payload)
+        log_line(f"[{job_id}] job aceito")
+        return get_job(job_id)
 
-    worker = threading.Thread(
-        target=run_generation,
-        args=(job_id, payload),
-        daemon=True,
-    )
-    worker.start()
-    return get_job(job_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        LAST_ERROR = traceback.format_exc()[-4000:]
+        log_line(LAST_ERROR)
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(exc).__name__}: {str(exc)}",
+        )
 
 
 @app.get("/api/v1/jobs/{job_id}")
@@ -331,6 +372,29 @@ def job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
     return job
+
+
+@app.get("/api/v1/diagnostics")
+def diagnostics():
+    tail = ""
+    try:
+        if LOG_PATH.exists():
+            lines = LOG_PATH.read_text(
+                encoding="utf-8",
+                errors="ignore",
+            ).splitlines()
+            tail = "\n".join(lines[-80:])
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "gpu": gpu_name(),
+        "cuda": torch.cuda.is_available(),
+        "jobs": len(JOBS),
+        "last_error": LAST_ERROR,
+        "log_tail": tail,
+    }
 
 
 @app.get("/")

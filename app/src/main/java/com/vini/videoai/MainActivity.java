@@ -689,7 +689,7 @@ public class MainActivity extends Activity {
         return muted;
     }
 
-    private String normalizeModel(String value) {
+    private static String normalizeModel(String value) {
         String s = value.toLowerCase();
         if (s.contains("wan")) return "wan2.2";
         if (s.contains("ltx")) return "ltx-2";
@@ -751,7 +751,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private class Project {
+    private static class Project {
         String id = UUID.randomUUID().toString();
         long createdAt = System.currentTimeMillis();
         String prompt = "";
@@ -798,8 +798,7 @@ public class MainActivity extends Activity {
         }
 
         static Project fromJson(JSONObject o) {
-            MainActivity owner = MainActivity.this;
-            Project p = owner.new Project();
+            Project p = new Project();
             p.id = o.optString("id", p.id);
             p.createdAt = o.optLong("created_at", p.createdAt);
             p.prompt = o.optString("prompt", "");

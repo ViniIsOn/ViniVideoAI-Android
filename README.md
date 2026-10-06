@@ -1,5 +1,14 @@
 # ViniVideo AI
 
+## v0.3 — motor grátis pelo celular
+
+A v0.3 adiciona um notebook do Google Colab que inicia um backend real de geração de vídeo em GPU gratuita e cria uma URL pública temporária via Cloudflare Tunnel. O app ganhou o botão **Iniciar motor grátis (Colab)** na tela Backend.
+
+O perfil gratuito usa **LTX-Video 2B** para permitir texto→vídeo, imagem→vídeo e continuidade entre tomadas por último frame. Ele é experimental: Colab gratuito pode desconectar, limitar GPU ou demorar bastante, e não entrega a mesma qualidade de serviços fechados como Flow.
+
+Caminho rápido: **Backend → Iniciar motor grátis → rodar tudo no Colab → copiar URL trycloudflare.com → colar no app → Testar conexão → Criar**.
+
+
 Aplicativo Android nativo para criar e controlar geração de vídeos por IA.
 
 ## v0.2

@@ -31,6 +31,11 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Validate backend and Colab notebook
+        run: |
+          python -m py_compile backend/server.py
+          python -m json.tool colab/ViniVideoAI_FreeGPU.ipynb >/dev/null
+
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:

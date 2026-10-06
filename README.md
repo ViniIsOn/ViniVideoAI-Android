@@ -1,33 +1,114 @@
 # ViniVideo AI
 
-Aplicativo Android nativo para planejar e orquestrar geração de vídeos longos em múltiplas cenas.
+Aplicativo Android nativo para criar e controlar geração de vídeos por IA.
 
-## v0.1
+## v0.2
 
-- Java + Android nativo, sem HTML/WebView
-- 9:16, 16:9 e 1:1
-- duração de 5 a 600 segundos
-- storyboard automático em cenas
-- continuidade entre cenas
-- imagem de referência
-- histórico local
-- exportação JSON
-- perfis Demo, Wan 2.2, LTX-2 e HunyuanVideo 1.5
-- backend self-hosted configurável
-- envio de job, consulta de status e download do MP4
-- GitHub Actions gera APK debug
+A v0.2 abandona a interface de “lista de prompts” e passa a funcionar como um estúdio:
 
-> Os modelos de vídeo não ficam dentro do APK. O aplicativo funciona como estúdio/controle e pode conversar com uma GPU/servidor próprio.
+- Android nativo em Java, sem HTML/WebView;
+- ícone próprio;
+- rascunho salvo automaticamente enquanto o usuário digita;
+- botão separado para salvar projeto e botão separado para gerar;
+- 9:16, 16:9 e 1:1;
+- 5 segundos até 10 minutos;
+- Wan 2.2, LTX-2 e HunyuanVideo 1.5 como perfis de backend;
+- presets Rápido, Qualidade e Cinema;
+- imagem de referência enviada ao backend em JPEG/base64;
+- Director AI;
+- continuidade forte usando estratégia de último frame;
+- timeline compacta;
+- preview de vídeo no próprio app;
+- progresso 0–100 e estágio atual;
+- polling automático do job;
+- download do MP4;
+- histórico local de projetos;
+- teste de conexão com o backend;
+- GitHub Actions gera o APK.
 
-## Backend
+## Limite real
 
-POST `/api/v1/jobs` cria um job.  
-GET `/api/v1/jobs/{id}` consulta o status.
+O APK é o estúdio/cliente. Modelos de vídeo grandes precisam de uma GPU em algum lugar.  
+Sem backend conectado, o aplicativo **não finge** que gerou um vídeo.
 
-Resposta esperada:
+O aplicativo não possui sistema próprio de créditos. Custos e limites dependem do servidor em que o modelo estiver rodando.
 
-```json
-{"job_id":"abc123","status":"QUEUED","output_url":""}
+## API esperada
+
+### Health
+
+```
+GET /api/v1/health
 ```
 
-Quando terminar, o backend retorna `status: "DONE"` e um `output_url` para o MP4.
+Resposta JSON 2xx:
+
+```json
+{"status":"ok"}
+```
+
+### Criar geração
+
+```
+POST /api/v1/jobs
+Content-Type: application/json
+```
+
+O corpo contém:
+
+- prompt;
+- aspect_ratio;
+- duration_seconds;
+- model;
+- quality_preset;
+- fps;
+- seed;
+- director_mode;
+- generate_audio;
+- continuity_mode;
+- render_strategy;
+- reference_image (quando houver);
+- scenes[];
+- stitch{}.
+
+Resposta:
+
+```json
+{
+  "job_id": "abc123",
+  "status": "QUEUED",
+  "progress": 5,
+  "stage": "Na fila",
+  "output_url": ""
+}
+```
+
+### Consultar geração
+
+```
+GET /api/v1/jobs/{id}
+```
+
+Enquanto renderiza:
+
+```json
+{
+  "job_id": "abc123",
+  "status": "RUNNING",
+  "progress": 63,
+  "stage": "Renderizando tomada 4/7",
+  "output_url": ""
+}
+```
+
+Quando concluir:
+
+```json
+{
+  "job_id": "abc123",
+  "status": "DONE",
+  "progress": 100,
+  "stage": "Concluído",
+  "output_url": "/outputs/abc123.mp4"
+}
+```

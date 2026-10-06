@@ -35,6 +35,7 @@ jobs:
         run: |
           python -m py_compile backend/server.py
           python -m json.tool colab/ViniVideoAI_FreeGPU.ipynb >/dev/null
+          python scripts/validate_colab_notebook.py
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4

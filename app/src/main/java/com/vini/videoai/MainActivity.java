@@ -953,8 +953,13 @@ public class MainActivity extends Activity {
         String response = readAll(stream);
 
         if (code < 200 || code >= 300) {
+            String detail = response;
+            try {
+                JSONObject errorJson = new JSONObject(response);
+                detail = errorJson.optString("detail", response);
+            } catch (Exception ignored) {}
             throw new IllegalStateException(
-                    "HTTP " + code + (response.isEmpty() ? "" : ": " + response));
+                    "HTTP " + code + (detail.isEmpty() ? "" : ": " + detail));
         }
 
         if (response.trim().isEmpty()) return new JSONObject();

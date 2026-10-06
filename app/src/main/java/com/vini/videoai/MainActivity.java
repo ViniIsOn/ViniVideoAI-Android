@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
     private static final String BACKEND = "backend";
     private static final String API_KEY = "api_key";
     private static final String BACKEND_OK = "backend_ok";
+    private static final String LAST_SCREEN = "last_screen";
 
     private static final String DRAFT_PROMPT = "draft_prompt";
     private static final String DRAFT_ASPECT = "draft_aspect";
@@ -113,7 +114,14 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         getWindow().setStatusBarColor(bg);
         getWindow().setNavigationBarColor(Color.BLACK);
-        showCreate();
+        String lastScreen = prefs.getString(LAST_SCREEN, "CRIAR");
+        if ("BACKEND".equals(lastScreen)) {
+            showSettings();
+        } else if ("PROJETOS".equals(lastScreen)) {
+            showProjects();
+        } else {
+            showCreate();
+        }
     }
 
     private void baseScreen() {
@@ -133,6 +141,7 @@ public class MainActivity extends Activity {
     }
 
     private void showCreate() {
+        prefs.edit().putString(LAST_SCREEN, "CRIAR").apply();
         baseScreen();
         brand("ViniVideo AI", "Estúdio nativo • projeto salvo automaticamente");
         navBar("CRIAR");
@@ -602,6 +611,7 @@ public class MainActivity extends Activity {
     }
 
     private void showProjects() {
+        prefs.edit().putString(LAST_SCREEN, "PROJETOS").apply();
         baseScreen();
         brand("Projetos", "Tudo salvo neste aparelho");
         navBar("PROJETOS");
@@ -648,6 +658,7 @@ public class MainActivity extends Activity {
     }
 
     private void showSettings() {
+        prefs.edit().putString(LAST_SCREEN, "BACKEND").apply();
         baseScreen();
         brand("Backend", "Motor de geração real");
         navBar("BACKEND");
@@ -676,11 +687,22 @@ public class MainActivity extends Activity {
                 "Chave do seu próprio servidor");
         c.addView(key, margin(-1, dp(54), 0, 12));
 
-        Button freeEngine = button("🚀 INICIAR MOTOR GRÁTIS (COLAB)", cyanDark, cyan);
+        boolean hasBackend = !prefs.getString(BACKEND, "").trim().isEmpty();
+        Button freeEngine = button(
+                hasBackend
+                        ? "🚀 REABRIR MOTOR GRÁTIS (COLAB)"
+                        : "🚀 INICIAR MOTOR GRÁTIS (COLAB)",
+                cyanDark,
+                cyan);
         freeEngine.setOnClickListener(v -> openFreeColab());
         c.addView(freeEngine, margin(-1, dp(54), 0, 8));
+
+        Button pasteUrl = button("📋 COLAR URL DO COLAB E TESTAR", panelAlt, cyan);
+        pasteUrl.setOnClickListener(v -> pasteColabUrlAndTest(url, key));
+        c.addView(pasteUrl, margin(-1, dp(54), 0, 8));
+
         c.addView(small(
-                "O Colab abre no navegador. Rode as células, copie a URL trycloudflare.com que aparecer e cole acima.",
+                "Depois que aparecer a URL trycloudflare.com no Colab, copie-a. Ao voltar, esta tela continuará aberta. Toque em “Colar URL do Colab e testar”.",
                 muted), margin(-1, -2, 0, 12));
 
         Button save = button("Salvar", panelAlt, text);
@@ -716,7 +738,67 @@ public class MainActivity extends Activity {
                 muted), margin(-1, -2, 8, 0));
     }
 
+    private void pasteColabUrlAndTest(EditText url, EditText key) {
+        try {
+            android.content.ClipboardManager clipboard =
+                    (android.content.ClipboardManager) getSystemService(
+                            Context.CLIPBOARD_SERVICE);
+
+            if (clipboard == null
+                    || !clipboard.hasPrimaryClip()
+                    || clipboard.getPrimaryClip() == null
+                    || clipboard.getPrimaryClip().getItemCount() == 0) {
+                toast("Nada copiado ainda.");
+                return;
+            }
+
+            CharSequence value = clipboard
+                    .getPrimaryClip()
+                    .getItemAt(0)
+                    .coerceToText(this);
+
+            String clip = value == null ? "" : value.toString().trim();
+            int start = clip.indexOf("https://");
+            if (start < 0) {
+                toast("Não encontrei uma URL https:// copiada.");
+                return;
+            }
+
+            String endpoint = clip.substring(start).split("\\s+")[0].trim();
+            while (endpoint.endsWith("/")
+                    || endpoint.endsWith(".")
+                    || endpoint.endsWith(",")
+                    || endpoint.endsWith(")")) {
+                endpoint = endpoint.substring(0, endpoint.length() - 1);
+            }
+
+            if (!endpoint.contains(".trycloudflare.com")) {
+                new AlertDialog.Builder(this)
+                        .setTitle("URL diferente do Colab")
+                        .setMessage(
+                                "O texto copiado não parece uma URL trycloudflare.com. Você pode colar manualmente no campo se for outro backend.")
+                        .setPositiveButton("OK", null)
+                        .show();
+                return;
+            }
+
+            url.setText(endpoint);
+            prefs.edit()
+                    .putString(BACKEND, endpoint)
+                    .putString(API_KEY, key.getText().toString().trim())
+                    .putBoolean(BACKEND_OK, false)
+                    .putString(LAST_SCREEN, "BACKEND")
+                    .apply();
+
+            toast("URL colada. Testando…");
+            testBackend(endpoint);
+        } catch (Exception e) {
+            toast("Não consegui ler a URL copiada.");
+        }
+    }
+
     private void openFreeColab() {
+        prefs.edit().putString(LAST_SCREEN, "BACKEND").apply();
         try {
             Intent i = new Intent(
                     Intent.ACTION_VIEW,

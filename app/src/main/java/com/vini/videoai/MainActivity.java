@@ -755,8 +755,12 @@ public class MainActivity extends Activity {
         pasteUrl.setOnClickListener(v -> pasteColabUrlAndTest(url, key));
         c.addView(pasteUrl, margin(-1, dp(54), 0, 8));
 
+        Button kaggle = button("🟦 ABRIR MOTOR KAGGLE (PLANO B)", panelAlt, text);
+        kaggle.setOnClickListener(v -> openKaggleFallback());
+        c.addView(kaggle, margin(-1, dp(54), 0, 8));
+
         c.addView(small(
-                "Depois que aparecer a URL trycloudflare.com no Colab, copie-a. Se o túnel trocar durante uma renderização, cole a NOVA URL aqui; o app retoma o mesmo job.",
+                "Colab: gera pelo app usando URL do motor. Kaggle: abre um notebook separado com GPU T4x2, gera o MP4 lá e mostra um link para baixar. Não precisa de Cloudflare.",
                 muted), margin(-1, -2, 0, 12));
 
         Button save = button("Salvar", panelAlt, text);
@@ -790,6 +794,23 @@ public class MainActivity extends Activity {
         api.addView(small(
                 "O job deve retornar status, progress (0–100), stage e output_url quando terminar.",
                 muted), margin(-1, -2, 8, 0));
+    }
+
+    private void openKaggleFallback() {
+        try {
+            String source =
+                    "https://github.com/ViniIsOn/ViniVideoAI-Android/blob/main/"
+                            + "kaggle/ViniVideoAI_Kaggle.ipynb";
+            String kaggleUrl =
+                    "https://www.kaggle.com/notebooks/welcome?src="
+                            + Uri.encode(source);
+            Intent i = new Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(kaggleUrl));
+            startActivity(i);
+        } catch (Exception e) {
+            toast("Não consegui abrir o Kaggle.");
+        }
     }
 
     private void pasteColabUrlAndTest(EditText url, EditText key) {

@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.4.2 — fallback Kaggle
+
+- Botão **Abrir motor Kaggle (Plano B)** na tela Backend.
+- Notebook `kaggle/ViniVideoAI_Kaggle.ipynb` abre direto do GitHub no Kaggle.
+- Use **Settings → Accelerator → GPU T4 x2** e Internet ativada.
+- O Kaggle gera o MP4 dentro do notebook e mostra um link de download.
+- Este fallback não usa Cloudflare/Ngrok e não preenche a URL do backend do app.
+
+
+
 ## v0.4 — Turbo + retomada
 
 - **Rápido** usa AnimateDiff-Lightning 4-step.

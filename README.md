@@ -1,5 +1,16 @@
 # ViniVideo AI
 
+## v0.6 — Prompt fiel + estilo + importação Kaggle
+
+- O prompt digitado pelo usuário passa a ser a prioridade da geração.
+- Novo seletor de estilo com **Cartoon Filme Animado** como padrão.
+- Botão **Gerar no Kaggle Qualidade** copia automaticamente a configuração do projeto.
+- Notebook Wan 2.1 usa o prompt do usuário + reforços técnicos de consistência.
+- Projetos podem importar o MP4 baixado do Kaggle e reproduzi-lo dentro do app.
+- O resultado importado fica associado ao projeto.
+
+
+
 ## v0.5 — Kaggle Qualidade (Wan 2.1)
 
 - Novo botão **Kaggle Qualidade — Wan 2.1**.

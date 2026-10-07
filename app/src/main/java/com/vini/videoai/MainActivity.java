@@ -61,6 +61,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int PICK_IMAGE = 10;
+    private static final int PICK_VIDEO = 11;
     private static final String PREFS = "vinivideo";
     private static final String PROJECTS = "projects";
     private static final String BACKEND = "backend";
@@ -78,6 +79,7 @@ public class MainActivity extends Activity {
     private static final String DRAFT_DIRECTOR = "draft_director";
     private static final String DRAFT_CONTINUITY = "draft_continuity";
     private static final String DRAFT_AUDIO = "draft_audio";
+    private static final String DRAFT_STYLE = "draft_style";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -89,6 +91,7 @@ public class MainActivity extends Activity {
     private Spinner modelSpinner;
     private Spinner qualitySpinner;
     private Spinner durationSpinner;
+    private Spinner styleSpinner;
     private TextView autosaveStatus;
     private ImageView referencePreview;
     private String selectedAspect = "9:16";
@@ -96,6 +99,7 @@ public class MainActivity extends Activity {
     private CheckBox directorCheck;
     private CheckBox continuityCheck;
     private CheckBox audioCheck;
+    private String pendingImportProjectId = "";
 
     private final int bg = Color.rgb(5, 11, 20);
     private final int panel = Color.rgb(11, 24, 39);
@@ -182,6 +186,21 @@ public class MainActivity extends Activity {
                 prefs.getString(DRAFT_DURATION, "30 s"));
         formatCard.addView(durationSpinner, margin(-1, dp(52), 0, 12));
 
+        sectionLabel(formatCard, "ESTILO");
+        styleSpinner = spinner(new String[]{
+                "Cartoon Filme Animado",
+                "Padrão",
+                "Anime",
+                "Cinemático",
+                "3D Realista"
+        });
+        setSpinnerSelection(styleSpinner,
+                prefs.getString(DRAFT_STYLE, "Cartoon Filme Animado"));
+        formatCard.addView(styleSpinner, margin(-1, dp(52), 0, 12));
+        formatCard.addView(small(
+                "Cartoon Filme Animado evita semi-realismo e reforça formas limpas, expressões e consistência.",
+                muted), margin(-1, -2, 0, 12));
+
         sectionLabel(formatCard, "MODELO");
         modelSpinner = spinner(new String[]{
                 "Motor grátis automático (Turbo/LTX)",
@@ -243,6 +262,20 @@ public class MainActivity extends Activity {
         directorCard.addView(directorCheck);
         directorCard.addView(continuityCheck);
         directorCard.addView(audioCheck);
+
+        Button kaggleGenerate = button(
+                "🎬 GERAR NO KAGGLE QUALIDADE",
+                cyanDark, cyan);
+        kaggleGenerate.setOnClickListener(v -> {
+            saveDraftNow();
+            Project p = projectFromDraft();
+            p.status = "KAGGLE";
+            p.progress = 0;
+            p.stage = "Configuração copiada para o Kaggle";
+            saveProject(p);
+            copyKaggleConfigAndOpen(p);
+        });
+        root.addView(kaggleGenerate, margin(-1, dp(58), 0, 10));
 
         Button generate = button(
                 prefs.getString(BACKEND, "").trim().isEmpty()
@@ -386,6 +419,9 @@ public class MainActivity extends Activity {
         if (qualitySpinner != null && qualitySpinner.getSelectedItem() != null) {
             e.putString(DRAFT_QUALITY, String.valueOf(qualitySpinner.getSelectedItem()));
         }
+        if (styleSpinner != null && styleSpinner.getSelectedItem() != null) {
+            e.putString(DRAFT_STYLE, String.valueOf(styleSpinner.getSelectedItem()));
+        }
         if (directorCheck != null) e.putBoolean(DRAFT_DIRECTOR, directorCheck.isChecked());
         if (continuityCheck != null) e.putBoolean(DRAFT_CONTINUITY, continuityCheck.isChecked());
         if (audioCheck != null) e.putBoolean(DRAFT_AUDIO, audioCheck.isChecked());
@@ -404,6 +440,7 @@ public class MainActivity extends Activity {
                 prefs.getString(DRAFT_DURATION, "30 s"));
         p.model = prefs.getString(DRAFT_MODEL, "Motor grátis automático (Turbo/LTX)");
         p.quality = prefs.getString(DRAFT_QUALITY, "Cinema");
+        p.style = prefs.getString(DRAFT_STYLE, "Cartoon Filme Animado");
         p.referenceUri = prefs.getString(DRAFT_REFERENCE, "");
         p.directorMode = prefs.getBoolean(DRAFT_DIRECTOR, true);
         p.strongContinuity = prefs.getBoolean(DRAFT_CONTINUITY, true);
@@ -459,6 +496,7 @@ public class MainActivity extends Activity {
                     : "";
 
             s.prompt = p.prompt
+                    + ". " + stylePrompt(p.style)
                     + ". Objetivo desta tomada: " + beat + ". "
                     + cameras[(index - 1) % cameras.length]
                     + ". Evite reiniciar cenário, trocar design do personagem ou inserir cortes aleatórios."
@@ -484,7 +522,10 @@ public class MainActivity extends Activity {
         preview.setBackground(round(Color.BLACK, 18));
         previewCard.addView(preview, margin(-1, previewHeight(p.aspect), 0, 12));
 
-        if (!p.outputUrl.isEmpty()) {
+        boolean hasImportedVideo = p.importedVideoUri != null
+                && !p.importedVideoUri.isEmpty();
+
+        if (hasImportedVideo || !p.outputUrl.isEmpty()) {
             VideoView video = new VideoView(this);
             video.setBackgroundColor(Color.BLACK);
             preview.addView(video, new FrameLayout.LayoutParams(-1, -1));
@@ -494,7 +535,9 @@ public class MainActivity extends Activity {
             playHint.setBackgroundColor(Color.argb(145, 0, 0, 0));
             preview.addView(playHint, new FrameLayout.LayoutParams(-1, -1));
 
-            String resolved = resolveOutputUrl(p.outputUrl);
+            String resolved = hasImportedVideo
+                    ? p.importedVideoUri
+                    : resolveOutputUrl(p.outputUrl);
             MediaController controller = new MediaController(this);
             controller.setAnchorView(video);
             video.setMediaController(controller);
@@ -534,10 +577,16 @@ public class MainActivity extends Activity {
             playButton.setOnClickListener(startPlayback);
             previewCard.addView(playButton, margin(-1, dp(50), 0, 8));
 
-            Button downloadNow = button("⬇ BAIXAR MP4", panelAlt, text);
-            downloadNow.setOnClickListener(v ->
-                    downloadVideo(resolved, p.id));
-            previewCard.addView(downloadNow, margin(-1, dp(50), 0, 12));
+            if (!hasImportedVideo) {
+                Button downloadNow = button("⬇ BAIXAR MP4", panelAlt, text);
+                downloadNow.setOnClickListener(v ->
+                        downloadVideo(resolved, p.id));
+                previewCard.addView(downloadNow, margin(-1, dp(50), 0, 12));
+            } else {
+                previewCard.addView(small(
+                        "Resultado importado do Kaggle e associado a este projeto.",
+                        green), margin(-1, -2, 0, 12));
+            }
         } else {
             TextView placeholder = centered(
                     p.jobId.isEmpty()
@@ -580,10 +629,12 @@ public class MainActivity extends Activity {
         root.addView(info, margin(-1, -2, 0, 12));
         sectionLabel(info, "CONFIGURAÇÃO");
         info.addView(keyValue("Qualidade", p.quality));
+        info.addView(keyValue("Estilo", p.style));
         info.addView(keyValue("Continuidade", p.strongContinuity ? "Último frame + referência" : "Normal"));
         info.addView(keyValue("Director AI", p.directorMode ? "Ligado" : "Desligado"));
         info.addView(keyValue("Áudio", p.generateAudio ? "Solicitado" : "Desligado"));
         info.addView(keyValue("Referência", p.referenceUri.isEmpty() ? "Nenhuma" : "Imagem selecionada"));
+        info.addView(keyValue("Resultado Kaggle", hasImportedVideo ? "Importado" : "Ainda não importado"));
 
         LinearLayout timeline = card();
         root.addView(timeline, margin(-1, -2, 0, 12));
@@ -617,7 +668,19 @@ public class MainActivity extends Activity {
                 "Toque em uma tomada para ver a instrução técnica. Ela fica escondida para não bagunçar a tela.",
                 muted), margin(-1, -2, 8, 0));
 
-        if (p.jobId.isEmpty() && p.outputUrl.isEmpty()) {
+        Button kaggleAgain = button("🎬 GERAR NO KAGGLE QUALIDADE", cyanDark, cyan);
+        kaggleAgain.setOnClickListener(v -> copyKaggleConfigAndOpen(p));
+        root.addView(kaggleAgain, margin(-1, dp(56), 0, 8));
+
+        Button importKaggle = button(
+                hasImportedVideo
+                        ? "📥 TROCAR RESULTADO DO KAGGLE"
+                        : "📥 IMPORTAR RESULTADO DO KAGGLE",
+                panelAlt, text);
+        importKaggle.setOnClickListener(v -> pickVideoForProject(p.id));
+        root.addView(importKaggle, margin(-1, dp(54), 0, 10));
+
+        if (p.jobId.isEmpty() && p.outputUrl.isEmpty() && !hasImportedVideo) {
             Button generate = button("GERAR VÍDEO", cyan, bg);
             generate.setOnClickListener(v -> {
                 if (prefs.getString(BACKEND, "").trim().isEmpty()) {
@@ -798,6 +861,76 @@ public class MainActivity extends Activity {
         api.addView(small(
                 "O job deve retornar status, progress (0–100), stage e output_url quando terminar.",
                 muted), margin(-1, -2, 8, 0));
+    }
+
+    private String styleCode(String style) {
+        if (style == null) return "cartoon_movie";
+        String s = style.toLowerCase(Locale.ROOT);
+        if (s.contains("anime")) return "anime";
+        if (s.contains("cinem")) return "cinematic";
+        if (s.contains("realista")) return "realistic_3d";
+        if (s.contains("padr")) return "default";
+        return "cartoon_movie";
+    }
+
+    private String stylePrompt(String style) {
+        String code = styleCode(style);
+        if ("anime".equals(code)) {
+            return "anime-inspired animation, clean stylized character design, expressive motion, consistent proportions";
+        }
+        if ("cinematic".equals(code)) {
+            return "cinematic animated film look, controlled lighting, appealing composition, smooth coherent motion";
+        }
+        if ("realistic_3d".equals(code)) {
+            return "high-quality stylized 3D rendering, cinematic lighting, coherent anatomy and stable character identity";
+        }
+        if ("default".equals(code)) {
+            return "clean high-quality animation, stable character identity, coherent motion";
+        }
+        return "stylized 3D animated feature-film look, clean appealing character shapes, expressive cartoon face, soft stylized materials, colorful production design, smooth coherent animation, avoid uncanny photorealism";
+    }
+
+    private void copyKaggleConfigAndOpen(Project p) {
+        try {
+            String profile = "Cinema".equalsIgnoreCase(p.quality)
+                    ? "MAXIMA"
+                    : "RAPIDO_QUALIDADE";
+
+            String config =
+                    "# ViniVideo AI v0.6 — cole na célula CONFIGURAÇÃO\n"
+                    + "USER_PROMPT = " + JSONObject.quote(p.prompt) + "\n"
+                    + "STYLE = " + JSONObject.quote(styleCode(p.style)) + "\n"
+                    + "ASPECT = " + JSONObject.quote(p.aspect) + "\n"
+                    + "DURATION_SECONDS = " + p.durationSeconds + "\n"
+                    + "PROFILE = " + JSONObject.quote(profile) + "\n"
+                    + "SEED = " + p.seed + "\n";
+
+            android.content.ClipboardManager clipboard =
+                    (android.content.ClipboardManager) getSystemService(
+                            Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText(
+                                "ViniVideo AI Kaggle", config));
+            }
+
+            prefs.edit()
+                    .putString(RETURN_PROJECT, p.id)
+                    .apply();
+
+            toast("Configuração copiada. Cole na célula CONFIGURAÇÃO do Kaggle.");
+            openKaggleQuality();
+        } catch (Exception e) {
+            toast("Não consegui preparar a configuração do Kaggle.");
+        }
+    }
+
+    private void pickVideoForProject(String projectId) {
+        pendingImportProjectId = projectId == null ? "" : projectId;
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("video/mp4");
+        startActivityForResult(i, PICK_VIDEO);
     }
 
     private void openKaggleQuality() {
@@ -1178,21 +1311,40 @@ public class MainActivity extends Activity {
     protected void onActivityResult(
             int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != PICK_IMAGE
-                || resultCode != RESULT_OK
+        if (resultCode != RESULT_OK
                 || data == null
                 || data.getData() == null) {
             return;
         }
 
         Uri uri = data.getData();
-        referenceUri = uri.toString();
 
         try {
             getContentResolver().takePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (Exception ignored) {}
 
+        if (requestCode == PICK_VIDEO) {
+            Project p = findProjectById(pendingImportProjectId);
+            pendingImportProjectId = "";
+            if (p == null) {
+                toast("Não encontrei o projeto para importar o vídeo.");
+                return;
+            }
+
+            p.importedVideoUri = uri.toString();
+            p.status = "IMPORTADO";
+            p.progress = 100;
+            p.stage = "Resultado do Kaggle importado";
+            saveProject(p);
+            toast("Vídeo do Kaggle importado ✓");
+            showProject(p);
+            return;
+        }
+
+        if (requestCode != PICK_IMAGE) return;
+
+        referenceUri = uri.toString();
         prefs.edit()
                 .putString(DRAFT_REFERENCE, referenceUri)
                 .apply();
@@ -1243,6 +1395,7 @@ public class MainActivity extends Activity {
                 .putString(DRAFT_DURATION, durationLabel(p.durationSeconds))
                 .putString(DRAFT_MODEL, p.model)
                 .putString(DRAFT_QUALITY, p.quality)
+                .putString(DRAFT_STYLE, p.style)
                 .putString(DRAFT_REFERENCE, p.referenceUri)
                 .putBoolean(DRAFT_DIRECTOR, p.directorMode)
                 .putBoolean(DRAFT_CONTINUITY, p.strongContinuity)
@@ -1323,7 +1476,9 @@ public class MainActivity extends Activity {
         o.put("duration_seconds", p.durationSeconds);
         o.put("model", p.model);
         o.put("quality", p.quality);
+        o.put("style", p.style);
         o.put("reference_uri", p.referenceUri);
+        o.put("imported_video_uri", p.importedVideoUri);
         o.put("director_mode", p.directorMode);
         o.put("strong_continuity", p.strongContinuity);
         o.put("generate_audio", p.generateAudio);
@@ -1358,7 +1513,9 @@ public class MainActivity extends Activity {
         p.durationSeconds = o.optInt("duration_seconds", 30);
         p.model = o.optString("model", "Motor grátis automático (Turbo/LTX)");
         p.quality = o.optString("quality", "Cinema");
+        p.style = o.optString("style", "Cartoon Filme Animado");
         p.referenceUri = o.optString("reference_uri", "");
+        p.importedVideoUri = o.optString("imported_video_uri", "");
         p.directorMode = o.optBoolean("director_mode", true);
         p.strongContinuity = o.optBoolean("strong_continuity", true);
         p.generateAudio = o.optBoolean("generate_audio", true);
@@ -1789,7 +1946,9 @@ public class MainActivity extends Activity {
         int durationSeconds = 30;
         String model = "Motor grátis automático (Turbo/LTX)";
         String quality = "Rápido";
+        String style = "Cartoon Filme Animado";
         String referenceUri = "";
+        String importedVideoUri = "";
         boolean directorMode = true;
         boolean strongContinuity = true;
         boolean generateAudio = true;

@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.6.1 — Interface simplificada
+
+- Tela **Criar** reduzida ao essencial: prompt, formato, duração e botão **Gerar vídeo**.
+- Padrão recomendado para o canal: **Cartoon Filme Animado + Qualidade Rápida + 9:16 + 5 s**.
+- Modelo, estilo alternativo, qualidade, referência visual, Director AI e backend próprio ficam em **⚙ Avançado**.
+- Tela de projeto esconde detalhes técnicos atrás de **Ver detalhes**.
+- Fluxo principal guiado: **escreva → gerar → Kaggle → baixar MP4 → importar no projeto**.
+
+
+
 ## v0.6 — Prompt fiel + estilo + importação Kaggle
 
 - O prompt digitado pelo usuário passa a ser a prioridade da geração.

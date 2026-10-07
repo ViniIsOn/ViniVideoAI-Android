@@ -489,8 +489,9 @@ public class MainActivity extends Activity {
             video.setBackgroundColor(Color.BLACK);
             preview.addView(video, new FrameLayout.LayoutParams(-1, -1));
 
-            TextView playHint = centered("Toque para reproduzir", text, 14);
-            playHint.setBackgroundColor(Color.argb(110, 0, 0, 0));
+            TextView playHint = centered("▶  REPRODUZIR VÍDEO", text, 16);
+            playHint.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            playHint.setBackgroundColor(Color.argb(145, 0, 0, 0));
             preview.addView(playHint, new FrameLayout.LayoutParams(-1, -1));
 
             String resolved = resolveOutputUrl(p.outputUrl);
@@ -498,11 +499,45 @@ public class MainActivity extends Activity {
             controller.setAnchorView(video);
             video.setMediaController(controller);
             video.setVideoURI(Uri.parse(resolved));
+
             video.setOnPreparedListener(mp -> {
-                playHint.setVisibility(View.GONE);
                 mp.setLooping(false);
+                try {
+                    video.seekTo(1);
+                } catch (Exception ignored) {}
+                playHint.setText("▶  REPRODUZIR VÍDEO");
+                playHint.setVisibility(View.VISIBLE);
             });
-            preview.setOnClickListener(v -> video.start());
+
+            View.OnClickListener startPlayback = v -> {
+                playHint.setVisibility(View.GONE);
+                video.start();
+            };
+            preview.setOnClickListener(startPlayback);
+            playHint.setOnClickListener(startPlayback);
+
+            video.setOnCompletionListener(mp -> {
+                playHint.setText("↻  REPRODUZIR NOVAMENTE");
+                playHint.setVisibility(View.VISIBLE);
+            });
+
+            video.setOnErrorListener((mp, what, extra) -> {
+                playHint.setText(
+                        "Não consegui abrir o preview.\nUse BAIXAR MP4 abaixo."
+                );
+                playHint.setTextColor(danger);
+                playHint.setVisibility(View.VISIBLE);
+                return true;
+            });
+
+            Button playButton = button("▶ REPRODUZIR", cyanDark, cyan);
+            playButton.setOnClickListener(startPlayback);
+            previewCard.addView(playButton, margin(-1, dp(50), 0, 8));
+
+            Button downloadNow = button("⬇ BAIXAR MP4", panelAlt, text);
+            downloadNow.setOnClickListener(v ->
+                    downloadVideo(resolved, p.id));
+            previewCard.addView(downloadNow, margin(-1, dp(50), 0, 12));
         } else {
             TextView placeholder = centered(
                     p.jobId.isEmpty()
@@ -592,13 +627,6 @@ public class MainActivity extends Activity {
                 }
             });
             root.addView(generate, margin(-1, dp(58), 0, 10));
-        }
-
-        if (!p.outputUrl.isEmpty()) {
-            Button download = button("BAIXAR MP4", cyan, bg);
-            download.setOnClickListener(v ->
-                    downloadVideo(resolveOutputUrl(p.outputUrl), p.id));
-            root.addView(download, margin(-1, dp(58), 0, 10));
         }
 
         if (p.connectionWarning != null

@@ -148,45 +148,56 @@ public class MainActivity extends Activity {
     private void showCreate() {
         prefs.edit().putString(LAST_SCREEN, "CRIAR").apply();
         baseScreen();
-        brand("ViniVideo AI", "Estúdio nativo • projeto salvo automaticamente");
+        brand("ViniVideo AI", "Crie sem se perder em configurações");
         navBar("CRIAR");
-
-        backendBanner();
 
         LinearLayout hero = card();
         root.addView(hero, margin(-1, -2, 0, 12));
-        label(hero, "CRIE O VÍDEO, NÃO UM MONTE DE PROMPTS", cyan, 12, true);
-        TextView intro = body("Descreva a história. O app monta a continuidade por baixo e envia tudo ao motor conectado.");
-        hero.addView(intro);
+        label(hero, "O QUE ACONTECE NO VÍDEO?", cyan, 12, true);
+        hero.addView(small(
+                "Escreva a cena. O app cuida do estilo e das configurações recomendadas.",
+                muted), margin(-1, -2, 0, 10));
 
-        LinearLayout promptCard = card();
-        root.addView(promptCard, margin(-1, -2, 0, 12));
-        sectionLabel(promptCard, "IDEIA");
         promptInput = edit(
                 prefs.getString(DRAFT_PROMPT, ""),
-                "Ex.: uma arara azul chega a uma cidade nova, conhece outro personagem e os dois exploram o lugar...");
+                "Ex.: Poder Azul olha para a câmera e percebe que está dentro de um vídeo...");
         promptInput.setMinLines(5);
         promptInput.setGravity(Gravity.TOP);
-        promptCard.addView(promptInput, margin(-1, -2, 0, 10));
+        hero.addView(promptInput, margin(-1, -2, 0, 10));
 
         autosaveStatus = small("Rascunho salvo automaticamente", green);
-        promptCard.addView(autosaveStatus);
+        hero.addView(autosaveStatus);
 
-        LinearLayout formatCard = card();
-        root.addView(formatCard, margin(-1, -2, 0, 12));
-        sectionLabel(formatCard, "FORMATO");
+        LinearLayout quick = card();
+        root.addView(quick, margin(-1, -2, 0, 12));
+
+        sectionLabel(quick, "FORMATO");
         selectedAspect = prefs.getString(DRAFT_ASPECT, "9:16");
-        formatCard.addView(aspectSelector(), margin(-1, -2, 0, 12));
+        if (!"9:16".equals(selectedAspect) && !"16:9".equals(selectedAspect)) {
+            selectedAspect = "9:16";
+        }
+        quick.addView(aspectSelectorSimple(), margin(-1, -2, 0, 12));
 
-        sectionLabel(formatCard, "DURAÇÃO");
-        durationSpinner = spinner(new String[]{
-                "5 s", "10 s", "15 s", "30 s", "60 s", "2 min", "5 min", "10 min"
-        });
-        setSpinnerSelection(durationSpinner,
-                prefs.getString(DRAFT_DURATION, "30 s"));
-        formatCard.addView(durationSpinner, margin(-1, dp(52), 0, 12));
+        sectionLabel(quick, "DURAÇÃO");
+        durationSpinner = spinner(new String[]{"5 s", "10 s", "15 s"});
+        String savedDuration = prefs.getString(DRAFT_DURATION, "5 s");
+        if (!"5 s".equals(savedDuration)
+                && !"10 s".equals(savedDuration)
+                && !"15 s".equals(savedDuration)) {
+            savedDuration = "5 s";
+        }
+        setSpinnerSelection(durationSpinner, savedDuration);
+        quick.addView(durationSpinner, margin(-1, dp(52), 0, 10));
 
-        sectionLabel(formatCard, "ESTILO");
+        quick.addView(small(
+                "Padrão recomendado: Poder Azul • Cartoon Filme Animado • Qualidade Rápida",
+                green));
+
+        // Configurações avançadas ficam prontas, mas escondidas.
+        LinearLayout advanced = card();
+        advanced.setVisibility(View.GONE);
+
+        sectionLabel(advanced, "ESTILO");
         styleSpinner = spinner(new String[]{
                 "Cartoon Filme Animado",
                 "Padrão",
@@ -196,12 +207,17 @@ public class MainActivity extends Activity {
         });
         setSpinnerSelection(styleSpinner,
                 prefs.getString(DRAFT_STYLE, "Cartoon Filme Animado"));
-        formatCard.addView(styleSpinner, margin(-1, dp(52), 0, 12));
-        formatCard.addView(small(
-                "Cartoon Filme Animado evita semi-realismo e reforça formas limpas, expressões e consistência.",
-                muted), margin(-1, -2, 0, 12));
+        advanced.addView(styleSpinner, margin(-1, dp(52), 0, 12));
 
-        sectionLabel(formatCard, "MODELO");
+        sectionLabel(advanced, "QUALIDADE");
+        qualitySpinner = spinner(new String[]{
+                "Rápido", "Qualidade", "Cinema"
+        });
+        setSpinnerSelection(qualitySpinner,
+                prefs.getString(DRAFT_QUALITY, "Rápido"));
+        advanced.addView(qualitySpinner, margin(-1, dp(52), 0, 12));
+
+        sectionLabel(advanced, "MODELO / BACKEND PRÓPRIO");
         modelSpinner = spinner(new String[]{
                 "Motor grátis automático (Turbo/LTX)",
                 "Wan 2.2 (backend próprio)",
@@ -210,31 +226,18 @@ public class MainActivity extends Activity {
         });
         setSpinnerSelection(modelSpinner,
                 prefs.getString(DRAFT_MODEL, "Motor grátis automático (Turbo/LTX)"));
-        formatCard.addView(modelSpinner, margin(-1, dp(52), 0, 12));
+        advanced.addView(modelSpinner, margin(-1, dp(52), 0, 12));
 
-        sectionLabel(formatCard, "QUALIDADE");
-        qualitySpinner = spinner(new String[]{
-                "Rápido", "Qualidade", "Cinema"
-        });
-        setSpinnerSelection(qualitySpinner,
-                prefs.getString(DRAFT_QUALITY, "Rápido"));
-        formatCard.addView(qualitySpinner, margin(-1, dp(52), 0, 4));
-        formatCard.addView(small(
-                "Rápido usa AnimateDiff-Lightning 4-step. Qualidade/Cinema usam LTX e demoram mais para iniciar.",
-                muted), margin(-1, -2, 8, 0));
-
-        LinearLayout referenceCard = card();
-        root.addView(referenceCard, margin(-1, -2, 0, 12));
-        sectionLabel(referenceCard, "REFERÊNCIA VISUAL");
-        referenceCard.addView(small(
-                "Use uma imagem para manter personagem, roupa, cores e estilo mais consistentes.",
-                muted), margin(-1, -2, 0, 10));
+        sectionLabel(advanced, "REFERÊNCIA VISUAL");
+        advanced.addView(small(
+                "Opcional. A integração completa de referência ainda está em desenvolvimento.",
+                muted), margin(-1, -2, 0, 8));
 
         referencePreview = new ImageView(this);
         referencePreview.setAdjustViewBounds(true);
         referencePreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
         referencePreview.setBackground(round(panelAlt, 16));
-        referenceCard.addView(referencePreview, margin(-1, dp(190), 0, 10));
+        advanced.addView(referencePreview, margin(-1, dp(160), 0, 8));
 
         referenceUri = prefs.getString(DRAFT_REFERENCE, "");
         refreshReferencePreview();
@@ -243,46 +246,26 @@ public class MainActivity extends Activity {
                 referenceUri.isEmpty() ? "+ Adicionar imagem" : "Trocar imagem",
                 panelAlt, cyan);
         chooseImage.setOnClickListener(v -> pickImage());
-        referenceCard.addView(chooseImage, margin(-1, dp(50), 0, 0));
+        advanced.addView(chooseImage, margin(-1, dp(50), 0, 12));
 
-        LinearLayout directorCard = card();
-        root.addView(directorCard, margin(-1, -2, 0, 12));
-        sectionLabel(directorCard, "DIREÇÃO IA");
-
+        sectionLabel(advanced, "DIREÇÃO");
         directorCheck = checkbox(
-                "Director AI — planejar enquadramentos e ritmo",
+                "Director AI",
                 prefs.getBoolean(DRAFT_DIRECTOR, true));
         continuityCheck = checkbox(
-                "Consistência forte — usar último frame como referência",
+                "Consistência forte",
                 prefs.getBoolean(DRAFT_CONTINUITY, true));
         audioCheck = checkbox(
-                "Gerar áudio quando o modelo/backend suportar",
+                "Pedir áudio quando o backend suportar",
                 prefs.getBoolean(DRAFT_AUDIO, true));
+        advanced.addView(directorCheck);
+        advanced.addView(continuityCheck);
+        advanced.addView(audioCheck);
 
-        directorCard.addView(directorCheck);
-        directorCard.addView(continuityCheck);
-        directorCard.addView(audioCheck);
-
-        Button kaggleGenerate = button(
-                "🎬 GERAR NO KAGGLE QUALIDADE",
-                cyanDark, cyan);
-        kaggleGenerate.setOnClickListener(v -> {
-            saveDraftNow();
-            Project p = projectFromDraft();
-            p.status = "KAGGLE";
-            p.progress = 0;
-            p.stage = "Configuração copiada para o Kaggle";
-            saveProject(p);
-            copyKaggleConfigAndOpen(p);
-        });
-        root.addView(kaggleGenerate, margin(-1, dp(58), 0, 10));
-
-        Button generate = button(
-                prefs.getString(BACKEND, "").trim().isEmpty()
-                        ? "CONECTAR MOTOR PARA GERAR"
-                        : "GERAR VÍDEO",
-                cyan, bg);
-        generate.setOnClickListener(v -> {
+        Button backendGenerate = button(
+                "GERAR COM BACKEND PRÓPRIO",
+                panelAlt, text);
+        backendGenerate.setOnClickListener(v -> {
             saveDraftNow();
             if (prefs.getString(BACKEND, "").trim().isEmpty()) {
                 showBackendRequired();
@@ -295,9 +278,39 @@ public class MainActivity extends Activity {
             saveProject(p);
             submitProject(p);
         });
-        root.addView(generate, margin(-1, dp(58), 0, 10));
+        advanced.addView(backendGenerate, margin(-1, dp(52), 12, 0));
 
-        Button save = button("Salvar como projeto", panelAlt, text);
+        Button advancedButton = button("⚙ AVANÇADO", panelAlt, muted);
+        advancedButton.setOnClickListener(v -> {
+            boolean opening = advanced.getVisibility() != View.VISIBLE;
+            advanced.setVisibility(opening ? View.VISIBLE : View.GONE);
+            advancedButton.setText(opening ? "⚙ OCULTAR AVANÇADO" : "⚙ AVANÇADO");
+        });
+        root.addView(advancedButton, margin(-1, dp(50), 0, 8));
+        root.addView(advanced, margin(-1, -2, 0, 12));
+
+        Button generate = button("🎬 GERAR VÍDEO", cyan, bg);
+        generate.setOnClickListener(v -> {
+            // Defaults simples, sem obrigar o usuário a decidir tudo.
+            if (styleSpinner.getSelectedItem() == null) {
+                styleSpinner.setSelection(0);
+            }
+            saveDraftNow();
+
+            Project p = projectFromDraft();
+            p.status = "KAGGLE";
+            p.progress = 0;
+            p.stage = "Abra o Kaggle, cole a configuração e use Run All";
+            saveProject(p);
+            copyKaggleConfigAndOpen(p);
+        });
+        root.addView(generate, margin(-1, dp(62), 0, 10));
+
+        root.addView(small(
+                "Fluxo simples: escreva → gerar → no Kaggle cole a configuração → Run All → baixe o MP4 → importe no projeto.",
+                muted), margin(-1, -2, 0, 8));
+
+        Button save = button("Salvar rascunho como projeto", panelAlt, text);
         save.setOnClickListener(v -> {
             saveDraftNow();
             Project p = projectFromDraft();
@@ -307,13 +320,33 @@ public class MainActivity extends Activity {
             toast("Projeto salvo.");
             showProject(p);
         });
-        root.addView(save, margin(-1, dp(54), 0, 8));
-
-        root.addView(small(
-                "Nada é enviado sem você tocar em “Gerar vídeo”. O rascunho fica salvo no aparelho enquanto você digita.",
-                muted));
+        root.addView(save, margin(-1, dp(50), 0, 8));
 
         attachDraftListeners();
+    }
+
+    private View aspectSelectorSimple() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+
+        String[] values = {"9:16", "16:9"};
+        for (String value : values) {
+            Button b = button(
+                    value,
+                    value.equals(selectedAspect) ? cyanDark : panelAlt,
+                    value.equals(selectedAspect) ? cyan : text);
+            b.setTag(value);
+            b.setOnClickListener(v -> {
+                selectedAspect = String.valueOf(v.getTag());
+                saveDraftNow();
+                showCreate();
+            });
+            row.addView(b, new LinearLayout.LayoutParams(0, dp(50), 1));
+            if (!"16:9".equals(value)) {
+                row.addView(space(8));
+            }
+        }
+        return row;
     }
 
     private void backendBanner() {
@@ -392,6 +425,7 @@ public class MainActivity extends Activity {
         durationSpinner.setOnItemSelectedListener(selectionListener);
         modelSpinner.setOnItemSelectedListener(selectionListener);
         qualitySpinner.setOnItemSelectedListener(selectionListener);
+        styleSpinner.setOnItemSelectedListener(selectionListener);
 
         directorCheck.setOnCheckedChangeListener((b, checked) -> saveDraftNow());
         continuityCheck.setOnCheckedChangeListener((b, checked) -> saveDraftNow());
@@ -437,9 +471,9 @@ public class MainActivity extends Activity {
         p.prompt = prompt;
         p.aspect = prefs.getString(DRAFT_ASPECT, "9:16");
         p.durationSeconds = durationSeconds(
-                prefs.getString(DRAFT_DURATION, "30 s"));
+                prefs.getString(DRAFT_DURATION, "5 s"));
         p.model = prefs.getString(DRAFT_MODEL, "Motor grátis automático (Turbo/LTX)");
-        p.quality = prefs.getString(DRAFT_QUALITY, "Cinema");
+        p.quality = prefs.getString(DRAFT_QUALITY, "Rápido");
         p.style = prefs.getString(DRAFT_STYLE, "Cartoon Filme Animado");
         p.referenceUri = prefs.getString(DRAFT_REFERENCE, "");
         p.directorMode = prefs.getBoolean(DRAFT_DIRECTOR, true);

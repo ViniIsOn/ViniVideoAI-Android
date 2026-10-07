@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.4 — Turbo + retomada
+
+- **Rápido** usa AnimateDiff-Lightning 4-step.
+- **Qualidade/Cinema** continuam usando LTX.
+- Downloads do Hugging Face usam Xet em modo de alta performance.
+- O Colab pode salvar checkpoints de tomadas no Google Drive em `MyDrive/ViniVideoAI`.
+- O backend usa o `project_id` como job estável e retoma tomadas já salvas após reinício.
+- Uma tomada concluída não precisa ser renderizada novamente depois de uma queda.
+
+
 ## v0.3 — motor grátis pelo celular
 
 A v0.3 adiciona um notebook do Google Colab que inicia um backend real de geração de vídeo em GPU gratuita e cria uma URL pública temporária via Cloudflare Tunnel. O app ganhou o botão **Iniciar motor grátis (Colab)** na tela Backend.

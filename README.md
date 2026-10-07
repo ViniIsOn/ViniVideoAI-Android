@@ -1,5 +1,16 @@
 # ViniVideo AI
 
+## v0.5 — Kaggle Qualidade (Wan 2.1)
+
+- Novo botão **Kaggle Qualidade — Wan 2.1**.
+- Notebook separado `kaggle/ViniVideoAI_Kaggle_Quality.ipynb`.
+- Geração próxima de 480p com **Wan 2.1 T2V 1.3B**.
+- 81 frames por tomada, mais passos de difusão e saída final interpolada para **24 fps**.
+- Modo pensado para priorizar consistência visual e movimento em vez de velocidade.
+- O modo rápido AnimateDiff continua disponível como fallback.
+
+
+
 ## v0.4.2 — fallback Kaggle
 
 - Botão **Abrir motor Kaggle (Plano B)** na tela Backend.

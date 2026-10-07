@@ -184,13 +184,13 @@ public class MainActivity extends Activity {
 
         sectionLabel(formatCard, "MODELO");
         modelSpinner = spinner(new String[]{
-                "LTX Video 2B (Colab grátis)",
+                "Motor grátis automático (Turbo/LTX)",
                 "Wan 2.2 (backend próprio)",
                 "LTX-2 (backend próprio)",
                 "HunyuanVideo 1.5 (backend próprio)"
         });
         setSpinnerSelection(modelSpinner,
-                prefs.getString(DRAFT_MODEL, "LTX Video 2B (Colab grátis)"));
+                prefs.getString(DRAFT_MODEL, "Motor grátis automático (Turbo/LTX)"));
         formatCard.addView(modelSpinner, margin(-1, dp(52), 0, 12));
 
         sectionLabel(formatCard, "QUALIDADE");
@@ -198,8 +198,11 @@ public class MainActivity extends Activity {
                 "Rápido", "Qualidade", "Cinema"
         });
         setSpinnerSelection(qualitySpinner,
-                prefs.getString(DRAFT_QUALITY, "Cinema"));
+                prefs.getString(DRAFT_QUALITY, "Rápido"));
         formatCard.addView(qualitySpinner, margin(-1, dp(52), 0, 4));
+        formatCard.addView(small(
+                "Rápido usa AnimateDiff-Lightning 4-step. Qualidade/Cinema usam LTX e demoram mais para iniciar.",
+                muted), margin(-1, -2, 8, 0));
 
         LinearLayout referenceCard = card();
         root.addView(referenceCard, margin(-1, -2, 0, 12));
@@ -399,7 +402,7 @@ public class MainActivity extends Activity {
         p.aspect = prefs.getString(DRAFT_ASPECT, "9:16");
         p.durationSeconds = durationSeconds(
                 prefs.getString(DRAFT_DURATION, "30 s"));
-        p.model = prefs.getString(DRAFT_MODEL, "LTX Video 2B (Colab grátis)");
+        p.model = prefs.getString(DRAFT_MODEL, "Motor grátis automático (Turbo/LTX)");
         p.quality = prefs.getString(DRAFT_QUALITY, "Cinema");
         p.referenceUri = prefs.getString(DRAFT_REFERENCE, "");
         p.directorMode = prefs.getBoolean(DRAFT_DIRECTOR, true);
@@ -1283,7 +1286,7 @@ public class MainActivity extends Activity {
         p.prompt = o.optString("prompt", "");
         p.aspect = o.optString("aspect_ratio", "9:16");
         p.durationSeconds = o.optInt("duration_seconds", 30);
-        p.model = o.optString("model", "LTX Video 2B (Colab grátis)");
+        p.model = o.optString("model", "Motor grátis automático (Turbo/LTX)");
         p.quality = o.optString("quality", "Cinema");
         p.referenceUri = o.optString("reference_uri", "");
         p.directorMode = o.optBoolean("director_mode", true);
@@ -1636,6 +1639,7 @@ public class MainActivity extends Activity {
 
     private String normalizeModel(String value) {
         String s = value.toLowerCase(Locale.ROOT);
+        if (s.contains("automático") || s.contains("automatico") || s.contains("turbo")) return "auto-turbo-ltx";
         if (s.contains("colab") || s.contains("video 2b")) return "ltx-video-2b";
         if (s.contains("wan")) return "wan2.2";
         if (s.contains("ltx-2")) return "ltx-2";
@@ -1713,8 +1717,8 @@ public class MainActivity extends Activity {
         String prompt = "";
         String aspect = "9:16";
         int durationSeconds = 30;
-        String model = "LTX Video 2B (Colab grátis)";
-        String quality = "Cinema";
+        String model = "Motor grátis automático (Turbo/LTX)";
+        String quality = "Rápido";
         String referenceUri = "";
         boolean directorMode = true;
         boolean strongContinuity = true;

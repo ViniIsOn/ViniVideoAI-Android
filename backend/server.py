@@ -28,7 +28,7 @@ app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
 
 JOBS = {}
 JOBS_LOCK = threading.Lock()
-MODEL_LOCK = threading.Lock()
+MODEL_LOCK = threading.RLock()
 TEXT_PIPE = None
 IMAGE_PIPE = None
 LAST_ERROR = ""

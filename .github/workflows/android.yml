@@ -36,7 +36,8 @@ jobs:
           python -m py_compile backend/server.py
           python -m json.tool colab/ViniVideoAI_FreeGPU.ipynb >/dev/null
           python -m json.tool kaggle/ViniVideoAI_Kaggle.ipynb >/dev/null
-          python scripts/validate_colab_notebook.py colab/ViniVideoAI_FreeGPU.ipynb kaggle/ViniVideoAI_Kaggle.ipynb
+          python -m json.tool kaggle/ViniVideoAI_Kaggle_Quality.ipynb >/dev/null
+          python scripts/validate_colab_notebook.py colab/ViniVideoAI_FreeGPU.ipynb kaggle/ViniVideoAI_Kaggle.ipynb kaggle/ViniVideoAI_Kaggle_Quality.ipynb
           python scripts/test_backend_contract.py
 
       - name: Set up Gradle 8.9

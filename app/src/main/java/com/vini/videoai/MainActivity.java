@@ -755,12 +755,16 @@ public class MainActivity extends Activity {
         pasteUrl.setOnClickListener(v -> pasteColabUrlAndTest(url, key));
         c.addView(pasteUrl, margin(-1, dp(54), 0, 8));
 
-        Button kaggle = button("🟦 ABRIR MOTOR KAGGLE (PLANO B)", panelAlt, text);
+        Button kaggleQuality = button("🎬 KAGGLE QUALIDADE — WAN 2.1", cyanDark, cyan);
+        kaggleQuality.setOnClickListener(v -> openKaggleQuality());
+        c.addView(kaggleQuality, margin(-1, dp(54), 0, 8));
+
+        Button kaggle = button("🟦 KAGGLE RÁPIDO — PLANO B", panelAlt, text);
         kaggle.setOnClickListener(v -> openKaggleFallback());
         c.addView(kaggle, margin(-1, dp(54), 0, 8));
 
         c.addView(small(
-                "Colab: gera pelo app usando URL do motor. Kaggle: abre um notebook separado com GPU T4x2, gera o MP4 lá e mostra um link para baixar. Não precisa de Cloudflare.",
+                "Kaggle Qualidade usa Wan 2.1 e prioriza consistência e detalhe. Kaggle Rápido usa AnimateDiff-Lightning. Os dois geram o MP4 dentro do Kaggle e mostram um link para baixar.",
                 muted), margin(-1, -2, 0, 12));
 
         Button save = button("Salvar", panelAlt, text);
@@ -794,6 +798,23 @@ public class MainActivity extends Activity {
         api.addView(small(
                 "O job deve retornar status, progress (0–100), stage e output_url quando terminar.",
                 muted), margin(-1, -2, 8, 0));
+    }
+
+    private void openKaggleQuality() {
+        try {
+            String source =
+                    "https://github.com/ViniIsOn/ViniVideoAI-Android/blob/main/"
+                            + "kaggle/ViniVideoAI_Kaggle_Quality.ipynb";
+            String kaggleUrl =
+                    "https://www.kaggle.com/notebooks/welcome?src="
+                            + Uri.encode(source);
+            Intent i = new Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(kaggleUrl));
+            startActivity(i);
+        } catch (Exception e) {
+            toast("Não consegui abrir o Kaggle Qualidade.");
+        }
     }
 
     private void openKaggleFallback() {

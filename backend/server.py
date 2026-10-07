@@ -28,7 +28,7 @@ app.mount("/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
 
 JOBS = {}
 JOBS_LOCK = threading.Lock()
-MODEL_LOCK = threading.Lock()
+MODEL_LOCK = threading.RLock()
 TEXT_PIPE = None
 IMAGE_PIPE = None
 LAST_ERROR = ""
@@ -186,7 +186,7 @@ def run_generation(job_id, payload):
             job_id,
             status="RUNNING",
             progress=2,
-            stage="Carregando LTX-Video 2B na GPU",
+            stage="Preparando motor de vídeo",
         )
 
         text_pipe = load_text_pipeline()
@@ -222,6 +222,32 @@ def run_generation(job_id, payload):
 
             generator = torch.Generator(device="cpu").manual_seed(seed + index)
 
+            scene_base = 5 + int(
+                (position / max(1, len(scenes))) * 85
+            )
+            scene_span = 85 / max(1, len(scenes))
+
+            def on_step_end(
+                pipeline,
+                step,
+                timestep,
+                callback_kwargs,
+            ):
+                fraction = (step + 1) / max(1, steps)
+                live_progress = min(
+                    89,
+                    int(scene_base + (scene_span * fraction * 0.92)),
+                )
+                set_job(
+                    job_id,
+                    progress=live_progress,
+                    stage=(
+                        f"Tomada {position + 1}/{len(scenes)} • "
+                        f"passo {step + 1}/{steps}"
+                    ),
+                )
+                return callback_kwargs
+
             common = dict(
                 prompt=prompt,
                 negative_prompt=NEGATIVE,
@@ -230,6 +256,7 @@ def run_generation(job_id, payload):
                 num_frames=frames_count,
                 num_inference_steps=steps,
                 generator=generator,
+                callback_on_step_end=on_step_end,
             )
 
             if last_frame is not None:
@@ -330,6 +357,7 @@ def health():
         "cuda": torch.cuda.is_available(),
         "model_profile": "ltx-video-2b",
         "model_id": MODEL_ID,
+        "model_ready": TEXT_PIPE is not None,
         "capabilities": {
             "text_to_video": True,
             "image_to_video": True,
@@ -337,6 +365,26 @@ def health():
             "audio_generation": False,
         },
     }
+
+
+@app.post("/api/v1/warmup")
+def warmup():
+    global LAST_ERROR
+    try:
+        load_text_pipeline()
+        return {
+            "status": "ok",
+            "model_ready": True,
+            "gpu": gpu_name(),
+            "model_id": MODEL_ID,
+        }
+    except Exception as exc:
+        LAST_ERROR = traceback.format_exc()[-4000:]
+        log_line(LAST_ERROR)
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(exc).__name__}: {str(exc)}",
+        )
 
 
 @app.post("/api/v1/jobs")

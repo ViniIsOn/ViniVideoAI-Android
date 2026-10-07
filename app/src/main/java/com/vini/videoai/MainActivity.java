@@ -67,6 +67,7 @@ public class MainActivity extends Activity {
     private static final String API_KEY = "api_key";
     private static final String BACKEND_OK = "backend_ok";
     private static final String LAST_SCREEN = "last_screen";
+    private static final String RETURN_PROJECT = "return_project_id";
 
     private static final String DRAFT_PROMPT = "draft_prompt";
     private static final String DRAFT_ASPECT = "draft_aspect";
@@ -530,6 +531,13 @@ public class MainActivity extends Activity {
                 (p.stage == null || p.stage.isEmpty()) ? "Aguardando" : p.stage,
                 p.status.equalsIgnoreCase("ERRO") ? danger : muted));
 
+        if (p.connectionWarning != null && !p.connectionWarning.isEmpty()) {
+            previewCard.addView(small(
+                    "Conexão com o motor perdida: " + p.connectionWarning
+                            + "\nA renderização pode continuar no Colab.",
+                    danger), margin(-1, -2, 8, 0));
+        }
+
         LinearLayout info = card();
         root.addView(info, margin(-1, -2, 0, 12));
         sectionLabel(info, "CONFIGURAÇÃO");
@@ -588,6 +596,21 @@ public class MainActivity extends Activity {
             download.setOnClickListener(v ->
                     downloadVideo(resolveOutputUrl(p.outputUrl), p.id));
             root.addView(download, margin(-1, dp(58), 0, 10));
+        }
+
+        if (p.connectionWarning != null
+                && !p.connectionWarning.isEmpty()
+                && !p.jobId.isEmpty()
+                && !isTerminal(p.status)) {
+            Button reconnect = button("🔄 RECONECTAR MOTOR E CONTINUAR", panelAlt, cyan);
+            reconnect.setOnClickListener(v -> {
+                prefs.edit()
+                        .putString(RETURN_PROJECT, p.id)
+                        .putString(LAST_SCREEN, "BACKEND")
+                        .apply();
+                showSettings();
+            });
+            root.addView(reconnect, margin(-1, dp(56), 0, 10));
         }
 
         Button duplicate = button("Duplicar para editar", panelAlt, text);
@@ -702,7 +725,7 @@ public class MainActivity extends Activity {
         c.addView(pasteUrl, margin(-1, dp(54), 0, 8));
 
         c.addView(small(
-                "Depois que aparecer a URL trycloudflare.com no Colab, copie-a. Ao voltar, esta tela continuará aberta. Toque em “Colar URL do Colab e testar”.",
+                "Depois que aparecer a URL trycloudflare.com no Colab, copie-a. Se o túnel trocar durante uma renderização, cole a NOVA URL aqui; o app retoma o mesmo job.",
                 muted), margin(-1, -2, 0, 12));
 
         Button save = button("Salvar", panelAlt, text);
@@ -822,6 +845,17 @@ public class MainActivity extends Activity {
                 prefs.edit().putBoolean(BACKEND_OK, true).apply();
                 runOnUiThread(() -> {
                     toast("Motor conectado ✓");
+                    String returnId = prefs.getString(RETURN_PROJECT, "");
+                    if (!returnId.isEmpty()) {
+                        prefs.edit().remove(RETURN_PROJECT).apply();
+                        Project project = findProjectById(returnId);
+                        if (project != null) {
+                            project.connectionWarning = "";
+                            saveProject(project);
+                            showProject(project);
+                            return;
+                        }
+                    }
                     showSettings();
                 });
             } catch (Exception e) {
@@ -900,13 +934,14 @@ public class MainActivity extends Activity {
                 p.status = response.optString("status", p.status);
                 p.progress = response.optInt("progress", p.progress);
                 p.stage = response.optString("stage", p.stage);
+                p.connectionWarning = "";
                 String output = response.optString("output_url", "");
                 if (!output.isEmpty()) p.outputUrl = output;
 
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             } catch (Exception e) {
-                p.stage = "Falha ao atualizar: " + compact(e.getMessage());
+                p.connectionWarning = compact(e.getMessage());
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             }
@@ -1186,6 +1221,14 @@ public class MainActivity extends Activity {
         return out;
     }
 
+    private Project findProjectById(String id) {
+        if (id == null || id.isEmpty()) return null;
+        for (Project p : loadProjects()) {
+            if (id.equals(p.id)) return p;
+        }
+        return null;
+    }
+
     private void deleteProject(String id) {
         List<Project> all = loadProjects();
         JSONArray a = new JSONArray();
@@ -1217,6 +1260,7 @@ public class MainActivity extends Activity {
         o.put("progress", p.progress);
         o.put("stage", p.stage);
         o.put("output_url", p.outputUrl);
+        o.put("connection_warning", p.connectionWarning);
 
         JSONArray scenes = new JSONArray();
         for (Scene s : p.scenes) {
@@ -1251,6 +1295,7 @@ public class MainActivity extends Activity {
         p.progress = o.optInt("progress", 0);
         p.stage = o.optString("stage", "");
         p.outputUrl = o.optString("output_url", "");
+        p.connectionWarning = o.optString("connection_warning", "");
 
         JSONArray scenes = o.optJSONArray("scenes");
         if (scenes != null) {
@@ -1680,6 +1725,7 @@ public class MainActivity extends Activity {
         int progress = 0;
         String stage = "";
         String outputUrl = "";
+        String connectionWarning = "";
         final List<Scene> scenes = new ArrayList<>();
     }
 }

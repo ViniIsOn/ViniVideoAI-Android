@@ -17,7 +17,7 @@ from PIL import Image
 OUTPUT_DIR = Path(os.environ.get("VINIVIDEO_OUTPUT_DIR", "/content/vinivideo_outputs"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-MODEL_ID = os.environ.get("VINIVIDEO_MODEL_ID", "Lightricks/LTX-Video")
+MODEL_ID = os.environ.get("VINIVIDEO_MODEL_ID", "Lightricks/LTX-Video-0.9.5")
 NEGATIVE = (
     "worst quality, low quality, blurry, jittery, distorted anatomy, "
     "deformed face, duplicated subject, random cuts, flicker, text, watermark"

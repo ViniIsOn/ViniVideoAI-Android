@@ -63,32 +63,46 @@ def get_job(job_id):
         return dict(JOBS.get(job_id, {}))
 
 
-def load_pipelines():
-    global TEXT_PIPE, IMAGE_PIPE
+def load_text_pipeline():
+    global TEXT_PIPE
     with MODEL_LOCK:
-        if TEXT_PIPE is not None and IMAGE_PIPE is not None:
-            return TEXT_PIPE, IMAGE_PIPE
+        if TEXT_PIPE is not None:
+            return TEXT_PIPE
 
         if not torch.cuda.is_available():
             raise RuntimeError("GPU CUDA não disponível. No Colab, ative Runtime > Change runtime type > T4 GPU.")
 
-        from diffusers import LTXImageToVideoPipeline, LTXPipeline
+        from diffusers import LTXPipeline
 
         set_dtype = torch.float16
-        TEXT_PIPE = LTXPipeline.from_pretrained(MODEL_ID, torch_dtype=set_dtype)
+        TEXT_PIPE = LTXPipeline.from_pretrained(
+            MODEL_ID,
+            torch_dtype=set_dtype,
+        )
         try:
             TEXT_PIPE.vae.enable_tiling()
         except Exception:
             pass
         TEXT_PIPE.enable_model_cpu_offload()
+        return TEXT_PIPE
 
-        IMAGE_PIPE = LTXImageToVideoPipeline.from_pipe(TEXT_PIPE)
+
+def load_image_pipeline():
+    global IMAGE_PIPE
+    with MODEL_LOCK:
+        if IMAGE_PIPE is not None:
+            return IMAGE_PIPE
+
+        text_pipe = load_text_pipeline()
+        from diffusers import LTXImageToVideoPipeline
+
+        IMAGE_PIPE = LTXImageToVideoPipeline.from_pipe(text_pipe)
         try:
             IMAGE_PIPE.vae.enable_tiling()
         except Exception:
             pass
         IMAGE_PIPE.enable_model_cpu_offload()
-        return TEXT_PIPE, IMAGE_PIPE
+        return IMAGE_PIPE
 
 
 def decode_reference(data_uri):
@@ -175,7 +189,8 @@ def run_generation(job_id, payload):
             stage="Carregando LTX-Video 2B na GPU",
         )
 
-        text_pipe, image_pipe = load_pipelines()
+        text_pipe = load_text_pipeline()
+        image_pipe = None
 
         aspect = payload.get("aspect_ratio", "9:16")
         quality = payload.get("quality_preset", "qualidade")
@@ -218,7 +233,16 @@ def run_generation(job_id, payload):
             )
 
             if last_frame is not None:
-                image = last_frame.resize((width, height), Image.Resampling.LANCZOS)
+                if image_pipe is None:
+                    set_job(
+                        job_id,
+                        stage="Carregando módulo de continuidade imagem→vídeo",
+                    )
+                    image_pipe = load_image_pipeline()
+                image = last_frame.resize(
+                    (width, height),
+                    Image.Resampling.LANCZOS,
+                )
                 result = image_pipe(image=image, **common)
             else:
                 result = text_pipe(**common)

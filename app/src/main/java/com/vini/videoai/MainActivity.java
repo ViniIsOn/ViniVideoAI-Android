@@ -636,7 +636,7 @@ public class MainActivity extends Activity {
         TextView status = pill(p.status, statusColor(p.status));
         statusRow.addView(status, new LinearLayout.LayoutParams(-2, dp(36)));
         TextView meta = small(
-                p.aspect + "  •  " + prettyDuration(p.durationSeconds) + "  •  " + p.model,
+                p.aspect + "  •  " + prettyDuration(p.durationSeconds) + "  •  " + p.style,
                 muted);
         LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(0, -2, 1);
         metaParams.leftMargin = dp(10);
@@ -659,48 +659,36 @@ public class MainActivity extends Activity {
                     danger), margin(-1, -2, 8, 0));
         }
 
-        LinearLayout info = card();
-        root.addView(info, margin(-1, -2, 0, 12));
-        sectionLabel(info, "CONFIGURAÇÃO");
-        info.addView(keyValue("Qualidade", p.quality));
-        info.addView(keyValue("Estilo", p.style));
-        info.addView(keyValue("Continuidade", p.strongContinuity ? "Último frame + referência" : "Normal"));
-        info.addView(keyValue("Director AI", p.directorMode ? "Ligado" : "Desligado"));
-        info.addView(keyValue("Áudio", p.generateAudio ? "Solicitado" : "Desligado"));
-        info.addView(keyValue("Referência", p.referenceUri.isEmpty() ? "Nenhuma" : "Imagem selecionada"));
-        info.addView(keyValue("Resultado Kaggle", hasImportedVideo ? "Importado" : "Ainda não importado"));
+        LinearLayout details = card();
+        details.setVisibility(View.GONE);
+        sectionLabel(details, "DETALHES DO PROJETO");
+        details.addView(keyValue("Qualidade", p.quality));
+        details.addView(keyValue("Estilo", p.style));
+        details.addView(keyValue(
+                "Continuidade",
+                p.strongContinuity ? "Forte" : "Normal"));
+        details.addView(keyValue(
+                "Director AI",
+                p.directorMode ? "Ligado" : "Desligado"));
+        details.addView(keyValue(
+                "Referência",
+                p.referenceUri.isEmpty() ? "Nenhuma" : "Selecionada"));
 
-        LinearLayout timeline = card();
-        root.addView(timeline, margin(-1, -2, 0, 12));
-        sectionLabel(timeline, "TIMELINE");
-
-        HorizontalScrollView scroller = new HorizontalScrollView(this);
-        scroller.setHorizontalScrollBarEnabled(false);
-        LinearLayout strip = new LinearLayout(this);
-        strip.setOrientation(LinearLayout.HORIZONTAL);
-        scroller.addView(strip);
-
-        for (Scene scene : p.scenes) {
-            LinearLayout shot = miniCard();
-            TextView number = small(String.format(Locale.US, "%02d", scene.index), cyan);
-            number.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            shot.addView(number);
-            TextView title = small(scene.title, text);
-            title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            shot.addView(title, margin(-1, -2, 0, 4));
-            shot.addView(small(
-                    scene.startSecond + "–" + (scene.startSecond + scene.durationSeconds) + "s",
-                    muted));
-            shot.setOnClickListener(v -> showSceneDetail(scene));
-            strip.addView(shot, new LinearLayout.LayoutParams(dp(150), dp(112)));
-            View gap = new View(this);
-            strip.addView(gap, new LinearLayout.LayoutParams(dp(8), 1));
+        if (!p.scenes.isEmpty()) {
+            details.addView(small(
+                    "O app preparou " + p.scenes.size()
+                            + " tomada(s) automaticamente. Você não precisa mexer nelas.",
+                    muted), margin(-1, -2, 8, 0));
         }
 
-        timeline.addView(scroller, margin(-1, dp(120), 0, 0));
-        timeline.addView(small(
-                "Toque em uma tomada para ver a instrução técnica. Ela fica escondida para não bagunçar a tela.",
-                muted), margin(-1, -2, 8, 0));
+        Button detailsButton = button("ℹ VER DETALHES", panelAlt, muted);
+        detailsButton.setOnClickListener(v -> {
+            boolean opening = details.getVisibility() != View.VISIBLE;
+            details.setVisibility(opening ? View.VISIBLE : View.GONE);
+            detailsButton.setText(opening ? "ℹ OCULTAR DETALHES" : "ℹ VER DETALHES");
+        });
+        root.addView(detailsButton, margin(-1, dp(50), 0, 8));
+        root.addView(details, margin(-1, -2, 0, 12));
 
         Button kaggleAgain = button("🎬 GERAR NO KAGGLE QUALIDADE", cyanDark, cyan);
         kaggleAgain.setOnClickListener(v -> copyKaggleConfigAndOpen(p));

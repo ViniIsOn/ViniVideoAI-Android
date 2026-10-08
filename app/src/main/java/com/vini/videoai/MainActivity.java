@@ -1226,9 +1226,16 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             String username =
                     prefs.getString(KAGGLE_USERNAME, "").trim();
+            String uniqueSuffix =
+                    Long.toHexString(System.currentTimeMillis())
+                            + "-"
+                            + UUID.randomUUID().toString()
+                            .substring(0, 6)
+                            .toLowerCase(Locale.ROOT);
             String testSlug =
-                    "vinivideo-permission-test-"
-                            + Long.toHexString(System.currentTimeMillis());
+                    "vinivideo-permission-test-" + uniqueSuffix;
+            String testTitle =
+                    "ViniVideo permission test " + uniqueSuffix;
 
             boolean created = false;
             try {
@@ -1239,7 +1246,7 @@ public class MainActivity extends Activity {
 
                 JSONObject body = new JSONObject();
                 body.put("slug", username + "/" + testSlug);
-                body.put("newTitle", "ViniVideo permission test");
+                body.put("newTitle", testTitle);
                 body.put(
                         "text",
                         "print('ViniVideo Kaggle permission test OK')\n");
@@ -1250,10 +1257,35 @@ public class MainActivity extends Activity {
                 body.put("enableTpu", false);
                 body.put("enableInternet", false);
 
-                kaggleRequestRaw(
-                        "POST",
-                        KAGGLE_API_BASE + "/kernels/push",
-                        body);
+                try {
+                    kaggleRequestRaw(
+                            "POST",
+                            KAGGLE_API_BASE + "/kernels/push",
+                            body);
+                } catch (Exception firstError) {
+                    String firstMessage = compact(firstError.getMessage());
+                    if (!firstMessage.contains("409")) {
+                        throw firstError;
+                    }
+
+                    uniqueSuffix =
+                            Long.toHexString(System.currentTimeMillis())
+                                    + "-"
+                                    + UUID.randomUUID().toString()
+                                    .substring(0, 8)
+                                    .toLowerCase(Locale.ROOT);
+                    testSlug =
+                            "vinivideo-permission-test-" + uniqueSuffix;
+                    testTitle =
+                            "ViniVideo permission test " + uniqueSuffix;
+                    body.put("slug", username + "/" + testSlug);
+                    body.put("newTitle", testTitle);
+
+                    kaggleRequestRaw(
+                            "POST",
+                            KAGGLE_API_BASE + "/kernels/push",
+                            body);
+                }
                 created = true;
 
                 try {
@@ -1322,6 +1354,11 @@ public class MainActivity extends Activity {
         }
         if (lower.contains("401")) {
             return "O Personal API Token não foi aceito. Gere um novo token em Settings → API Tokens e tente novamente.";
+        }
+        if (lower.contains("409")) {
+            return "O Kaggle informou conflito de título. "
+                    + "O app já tenta novamente com um título único; se isso aparecer outra vez, "
+                    + "mande apenas esta mensagem de erro.";
         }
         if (lower.contains("404")) {
             return "A API do Kaggle não encontrou a operação esperada: " + error;

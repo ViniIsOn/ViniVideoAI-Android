@@ -1,5 +1,14 @@
 # ViniVideo AI
 
+## v0.7.8 — evitar conflito 409 no teste Kaggle
+
+- Kernel de teste agora usa **slug e título únicos**.
+- Se o Kaggle ainda devolver HTTP 409, o app gera outro título automaticamente e tenta mais uma vez.
+- O teste continua sem GPU.
+- Nenhuma mudança no prompt ou no fluxo de geração real.
+
+
+
 ## v0.7.7 — não depender de kernels.get
 
 - Remove a dependência do endpoint de status do Kaggle que pode retornar `kernels.get = 403` indevidamente.

@@ -1,5 +1,16 @@
 # ViniVideo AI
 
+## v0.8.0 — mais rápido e menos travado
+
+- **Rápido** agora usa 10 steps, 41 frames e resolução 288×512 / 512×288.
+- Vídeos de até 10 s no modo Rápido usam uma única tomada, evitando duas gerações Wan pesadas.
+- **Qualidade** mantém 18 steps e **Cinema** mantém 28 steps.
+- Timeout: 20 min no Rápido, 35 min em Qualidade e 45 min em Cinema.
+- Excluir projeto sempre remove o projeto do aparelho.
+- A limpeza remota do Kaggle vira tentativa em segundo plano; se `kernels.delete` for negado, o projeto local continua apagado e a sessão remota encerra pelo timeout.
+
+
+
 ## v0.7.9 — API oficial atual do Kaggle
 
 - Troca rotas antigas `www.kaggle.com/api/v1/...` pelas rotas RPC atuais em `https://api.kaggle.com/v1`.

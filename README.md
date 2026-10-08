@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.6 — teste real do token Kaggle
+
+- Corrige a checagem errada de escopos em tokens pessoais `KGAT_...`.
+- O app não exige mais que o token exponha uma lista de OAuth scopes.
+- Ao tocar em testar, cria um kernel privado minúsculo **sem GPU**, consulta o status e tenta excluí-lo.
+- Só libera a geração direta se as três capacidades funcionarem: criar/executar, ler status e excluir.
+- Se falhar, mostra exatamente qual etapa não funcionou e não desperdiça GPU.
+
+
+
 ## v0.7.5 — verificar permissões antes de gerar
 
 - Kaggle Direto passa a usar **Personal API Token (Bearer)**.

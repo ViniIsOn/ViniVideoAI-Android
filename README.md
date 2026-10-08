@@ -1,5 +1,17 @@
 # ViniVideo AI
 
+## v0.7 — Kaggle Direto
+
+- O botão **Gerar vídeo** não usa mais copiar/colar como fluxo principal.
+- Nova conexão **Kaggle Direto** por usuário + Legacy API Key.
+- A API key é armazenada criptografada pelo **Android Keystore**.
+- O app cria um script privado no Kaggle, envia o prompt atual e inicia a execução com GPU.
+- O app consulta o status da execução automaticamente.
+- O resultado do Kaggle pode ser aberto pelo projeto; o fluxo manual continua apenas como fallback.
+- Runner Wan 2.1 incluído em `app/src/main/assets/kaggle_vinivideo_runner.py`.
+
+
+
 ## v0.6.2 — Prompt automático
 
 - Na tela Criar, o usuário escreve **só a ação do episódio**.

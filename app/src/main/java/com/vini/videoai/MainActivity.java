@@ -16,7 +16,10 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Base64;
 import android.view.Gravity;
@@ -50,6 +53,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -58,6 +62,11 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 public class MainActivity extends Activity {
     private static final int PICK_IMAGE = 10;
@@ -80,6 +89,11 @@ public class MainActivity extends Activity {
     private static final String DRAFT_CONTINUITY = "draft_continuity";
     private static final String DRAFT_AUDIO = "draft_audio";
     private static final String DRAFT_STYLE = "draft_style";
+
+    private static final String KAGGLE_USERNAME = "kaggle_username";
+    private static final String KAGGLE_KEY_ENC = "kaggle_key_enc";
+    private static final String KAGGLE_KEY_ALIAS = "vinivideo_kaggle_key";
+    private static final String KAGGLE_API_BASE = "https://www.kaggle.com/api/v1";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -298,16 +312,16 @@ public class MainActivity extends Activity {
             saveDraftNow();
 
             Project p = projectFromDraft();
-            p.status = "KAGGLE";
-            p.progress = 0;
-            p.stage = "Abra o Kaggle, cole a configuração e use Run All";
+            p.status = "PREPARANDO";
+            p.progress = 1;
+            p.stage = "Preparando envio direto ao Kaggle";
             saveProject(p);
-            copyKaggleConfigAndOpen(p);
+            submitKaggleProjectDirect(p);
         });
         root.addView(generate, margin(-1, dp(62), 0, 10));
 
         root.addView(small(
-                "Fluxo simples: escreva → gerar → no Kaggle cole a configuração → Run All → baixe o MP4 → importe no projeto.",
+                "Fluxo simples: escreva → gerar. O app envia o prompt e inicia o Kaggle sozinho. Sem copiar e colar.",
                 muted), margin(-1, -2, 0, 8));
 
         Button save = button("Salvar rascunho como projeto", panelAlt, text);
@@ -689,9 +703,30 @@ public class MainActivity extends Activity {
         root.addView(detailsButton, margin(-1, dp(50), 0, 8));
         root.addView(details, margin(-1, -2, 0, 12));
 
-        Button kaggleAgain = button("🎬 GERAR NO KAGGLE QUALIDADE", cyanDark, cyan);
-        kaggleAgain.setOnClickListener(v -> copyKaggleConfigAndOpen(p));
+        Button kaggleAgain = button("🎬 GERAR DIRETO NO KAGGLE", cyanDark, cyan);
+        kaggleAgain.setOnClickListener(v -> submitKaggleProjectDirect(p));
         root.addView(kaggleAgain, margin(-1, dp(56), 0, 8));
+
+        if (p.kaggleOutputPage != null
+                && !p.kaggleOutputPage.isEmpty()
+                && isTerminal(p.status)
+                && !p.status.toUpperCase(Locale.ROOT).contains("ERRO")) {
+            Button openKaggleOutput = button(
+                    "⬇ ABRIR RESULTADO DO KAGGLE",
+                    cyanDark, cyan);
+            openKaggleOutput.setOnClickListener(v -> {
+                try {
+                    startActivity(new Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(p.kaggleOutputPage)));
+                } catch (Exception e) {
+                    toast("Não consegui abrir o resultado do Kaggle.");
+                }
+            });
+            root.addView(
+                    openKaggleOutput,
+                    margin(-1, dp(54), 0, 8));
+        }
 
         Button importKaggle = button(
                 hasImportedVideo
@@ -702,7 +737,7 @@ public class MainActivity extends Activity {
         root.addView(importKaggle, margin(-1, dp(54), 0, 10));
 
         if (p.jobId.isEmpty() && p.outputUrl.isEmpty() && !hasImportedVideo) {
-            Button generate = button("GERAR VÍDEO", cyan, bg);
+            Button generate = button("AVANÇADO: BACKEND PRÓPRIO", panelAlt, text);
             generate.setOnClickListener(v -> {
                 if (prefs.getString(BACKEND, "").trim().isEmpty()) {
                     showBackendRequired();
@@ -737,6 +772,9 @@ public class MainActivity extends Activity {
 
         if (!p.jobId.isEmpty() && !isTerminal(p.status)) {
             handler.postDelayed(() -> refreshProject(p), 4000);
+        }
+        if (!p.kaggleSlug.isEmpty() && !isTerminal(p.status)) {
+            handler.postDelayed(() -> refreshKaggleProject(p), 8000);
         }
     }
 
@@ -801,6 +839,89 @@ public class MainActivity extends Activity {
         brand("Backend", "Motor de geração real");
         navBar("BACKEND");
 
+        LinearLayout kaggleDirect = card();
+        root.addView(kaggleDirect, margin(-1, -2, 0, 12));
+        label(kaggleDirect, "KAGGLE DIRETO — RECOMENDADO", cyan, 12, true);
+        kaggleDirect.addView(small(
+                "Conecte sua conta uma vez. Depois, o botão Gerar envia o prompt e inicia a GPU do Kaggle sem copiar e colar.",
+                muted), margin(-1, -2, 0, 12));
+
+        sectionLabel(kaggleDirect, "USUÁRIO KAGGLE");
+        EditText kaggleUser = edit(
+                prefs.getString(KAGGLE_USERNAME, ""),
+                "Seu nome de usuário no Kaggle");
+        kaggleUser.setSingleLine(true);
+        kaggleDirect.addView(kaggleUser, margin(-1, dp(54), 0, 10));
+
+        sectionLabel(kaggleDirect, "LEGACY API KEY");
+        boolean hasSavedKaggleKey = !prefs.getString(KAGGLE_KEY_ENC, "").isEmpty();
+        EditText kaggleKey = edit(
+                "",
+                hasSavedKaggleKey
+                        ? "Chave salva com segurança — deixe vazio para manter"
+                        : "Cole a key do kaggle.json");
+        kaggleKey.setSingleLine(true);
+        kaggleKey.setInputType(
+                InputType.TYPE_CLASS_TEXT
+                        | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        kaggleDirect.addView(kaggleKey, margin(-1, dp(54), 0, 8));
+
+        kaggleDirect.addView(small(
+                "No Kaggle: Settings → API → Create Legacy API Key. O app guarda a key criptografada no Android Keystore.",
+                muted), margin(-1, -2, 0, 10));
+
+        Button connectKaggle = button(
+                hasKaggleCredentials()
+                        ? "✓ TESTAR / ATUALIZAR CONEXÃO"
+                        : "CONECTAR KAGGLE",
+                cyan, bg);
+        connectKaggle.setOnClickListener(v -> {
+            String username = kaggleUser.getText().toString().trim();
+            String enteredKey = kaggleKey.getText().toString().trim();
+
+            if (username.isEmpty()) {
+                toast("Digite seu usuário do Kaggle.");
+                return;
+            }
+
+            try {
+                if (!enteredKey.isEmpty()) {
+                    saveKaggleCredentials(username, enteredKey);
+                } else if (hasKaggleCredentials()) {
+                    prefs.edit().putString(KAGGLE_USERNAME, username).apply();
+                } else {
+                    toast("Cole sua Legacy API Key.");
+                    return;
+                }
+            } catch (Exception e) {
+                toast("Não consegui salvar a credencial.");
+                return;
+            }
+
+            toast("Testando Kaggle…");
+            testKaggleDirect();
+        });
+        kaggleDirect.addView(connectKaggle, margin(-1, dp(54), 0, 8));
+
+        if (hasKaggleCredentials()) {
+            kaggleDirect.addView(small(
+                    "Conta configurada: " + prefs.getString(KAGGLE_USERNAME, ""),
+                    green), margin(-1, -2, 0, 8));
+
+            Button disconnectKaggle = button(
+                    "Desconectar Kaggle",
+                    panelAlt, danger);
+            disconnectKaggle.setOnClickListener(v -> {
+                prefs.edit()
+                        .remove(KAGGLE_USERNAME)
+                        .remove(KAGGLE_KEY_ENC)
+                        .apply();
+                toast("Kaggle desconectado.");
+                showSettings();
+            });
+            kaggleDirect.addView(disconnectKaggle, margin(-1, dp(48), 0, 0));
+        }
+
         LinearLayout warning = card();
         root.addView(warning, margin(-1, -2, 0, 12));
         label(warning, "IMPORTANTE", gold, 12, true);
@@ -839,7 +960,7 @@ public class MainActivity extends Activity {
         pasteUrl.setOnClickListener(v -> pasteColabUrlAndTest(url, key));
         c.addView(pasteUrl, margin(-1, dp(54), 0, 8));
 
-        Button kaggleQuality = button("🎬 KAGGLE QUALIDADE — WAN 2.1", cyanDark, cyan);
+        Button kaggleQuality = button("🧰 KAGGLE MANUAL — FALLBACK", panelAlt, text);
         kaggleQuality.setOnClickListener(v -> openKaggleQuality());
         c.addView(kaggleQuality, margin(-1, dp(54), 0, 8));
 
@@ -848,7 +969,7 @@ public class MainActivity extends Activity {
         c.addView(kaggle, margin(-1, dp(54), 0, 8));
 
         c.addView(small(
-                "Kaggle Qualidade usa Wan 2.1 e prioriza consistência e detalhe. Kaggle Rápido usa AnimateDiff-Lightning. Os dois geram o MP4 dentro do Kaggle e mostram um link para baixar.",
+                "O Kaggle Direto acima é o fluxo principal. Os botões abaixo ficam apenas como fallback manual se a API estiver indisponível.",
                 muted), margin(-1, -2, 0, 12));
 
         Button save = button("Salvar", panelAlt, text);
@@ -939,6 +1060,395 @@ public class MainActivity extends Activity {
         );
 
         return out.toString();
+    }
+
+    private boolean hasKaggleCredentials() {
+        return !prefs.getString(KAGGLE_USERNAME, "").trim().isEmpty()
+                && !prefs.getString(KAGGLE_KEY_ENC, "").trim().isEmpty();
+    }
+
+    private void saveKaggleCredentials(
+            String username,
+            String apiKey) throws Exception {
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Usuário Kaggle vazio");
+        }
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            throw new IllegalArgumentException("API key vazia");
+        }
+
+        String encrypted = encryptSecret(apiKey.trim());
+        prefs.edit()
+                .putString(KAGGLE_USERNAME, username.trim())
+                .putString(KAGGLE_KEY_ENC, encrypted)
+                .apply();
+    }
+
+    private String getKaggleApiKey() throws Exception {
+        String encrypted = prefs.getString(KAGGLE_KEY_ENC, "");
+        if (encrypted.isEmpty()) return "";
+        return decryptSecret(encrypted);
+    }
+
+    private SecretKey getOrCreateSecretKey() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+        keyStore.load(null);
+
+        if (keyStore.containsAlias(KAGGLE_KEY_ALIAS)) {
+            return ((KeyStore.SecretKeyEntry)
+                    keyStore.getEntry(KAGGLE_KEY_ALIAS, null))
+                    .getSecretKey();
+        }
+
+        KeyGenerator generator = KeyGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_AES,
+                "AndroidKeyStore");
+        generator.init(new KeyGenParameterSpec.Builder(
+                KAGGLE_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT
+                        | KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(
+                        KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build());
+        return generator.generateKey();
+    }
+
+    private String encryptSecret(String value) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey());
+
+        byte[] iv = cipher.getIV();
+        byte[] encrypted = cipher.doFinal(
+                value.getBytes(StandardCharsets.UTF_8));
+
+        byte[] joined = new byte[iv.length + encrypted.length];
+        System.arraycopy(iv, 0, joined, 0, iv.length);
+        System.arraycopy(
+                encrypted, 0, joined, iv.length, encrypted.length);
+
+        return Base64.encodeToString(joined, Base64.NO_WRAP);
+    }
+
+    private String decryptSecret(String encoded) throws Exception {
+        byte[] joined = Base64.decode(encoded, Base64.NO_WRAP);
+        if (joined.length < 13) {
+            throw new IllegalStateException("Credencial inválida");
+        }
+
+        byte[] iv = new byte[12];
+        byte[] encrypted = new byte[joined.length - 12];
+        System.arraycopy(joined, 0, iv, 0, 12);
+        System.arraycopy(joined, 12, encrypted, 0, encrypted.length);
+
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+                Cipher.DECRYPT_MODE,
+                getOrCreateSecretKey(),
+                new GCMParameterSpec(128, iv));
+
+        return new String(
+                cipher.doFinal(encrypted),
+                StandardCharsets.UTF_8);
+    }
+
+    private void testKaggleDirect() {
+        executor.execute(() -> {
+            try {
+                String endpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/list?group=profile&page=1&pageSize=1";
+                kaggleRequestRaw("GET", endpoint, null);
+                runOnUiThread(() -> {
+                    toast("Kaggle conectado ✓");
+                    showSettings();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> new AlertDialog.Builder(this)
+                        .setTitle("Não conectou ao Kaggle")
+                        .setMessage(
+                                compact(e.getMessage())
+                                        + "\n\nConfira o usuário e a Legacy API Key.")
+                        .setPositiveButton("OK", null)
+                        .show());
+            }
+        });
+    }
+
+    private void submitKaggleProjectDirect(Project p) {
+        if (!hasKaggleCredentials()) {
+            p.status = "PRECISA CONECTAR";
+            p.progress = 0;
+            p.stage = "Conecte sua conta Kaggle uma vez";
+            saveProject(p);
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Conectar Kaggle")
+                    .setMessage(
+                            "Para enviar o prompt direto sem copiar e colar, conecte sua conta Kaggle uma vez.")
+                    .setNegativeButton("Agora não", null)
+                    .setPositiveButton(
+                            "Conectar",
+                            (d, w) -> showSettings())
+                    .show();
+            return;
+        }
+
+        p.status = "ENVIANDO";
+        p.progress = 3;
+        p.stage = "Enviando prompt direto ao Kaggle";
+        p.connectionWarning = "";
+
+        String username =
+                prefs.getString(KAGGLE_USERNAME, "").trim();
+        String slug =
+                "vinivideo-"
+                        + p.id.substring(0, Math.min(8, p.id.length()))
+                        .toLowerCase(Locale.ROOT);
+
+        p.kaggleOwner = username;
+        p.kaggleSlug = slug;
+        p.kaggleOutputPage =
+                "https://www.kaggle.com/code/"
+                        + username + "/" + slug + "/output";
+
+        saveProject(p);
+        showProject(p);
+
+        executor.execute(() -> {
+            try {
+                String automaticPrompt =
+                        buildAutomaticKagglePrompt(
+                                p.prompt, p.style);
+                String profile =
+                        "Cinema".equalsIgnoreCase(p.quality)
+                                ? "MAXIMA"
+                                : "RAPIDO_QUALIDADE";
+
+                String script = readAssetText(
+                        "kaggle_vinivideo_runner.py")
+                        .replace(
+                                "__USER_PROMPT_JSON__",
+                                JSONObject.quote(automaticPrompt))
+                        .replace(
+                                "__ASPECT_JSON__",
+                                JSONObject.quote(p.aspect))
+                        .replace(
+                                "__DURATION_SECONDS__",
+                                String.valueOf(p.durationSeconds))
+                        .replace(
+                                "__PROFILE_JSON__",
+                                JSONObject.quote(profile))
+                        .replace(
+                                "__SEED__",
+                                String.valueOf(p.seed));
+
+                JSONObject body = new JSONObject();
+                body.put("slug", username + "/" + slug);
+                body.put("newTitle", "ViniVideo AI " + slug);
+                body.put("text", script);
+                body.put("language", "python");
+                body.put("kernelType", "script");
+                body.put("isPrivate", true);
+                body.put("enableGpu", true);
+                body.put("enableTpu", false);
+                body.put("enableInternet", true);
+
+                kaggleRequestRaw(
+                        "POST",
+                        KAGGLE_API_BASE + "/kernels/push",
+                        body);
+
+                p.status = "NA FILA";
+                p.progress = 8;
+                p.stage = "Kaggle recebeu o prompt • aguardando GPU";
+                saveProject(p);
+
+                runOnUiThread(() -> showProject(p));
+            } catch (Exception e) {
+                p.status = "ERRO";
+                p.progress = 0;
+                p.stage = compact(e.getMessage());
+                saveProject(p);
+
+                runOnUiThread(() -> showProject(p));
+            }
+        });
+    }
+
+    private void refreshKaggleProject(Project p) {
+        if (p.kaggleOwner == null
+                || p.kaggleOwner.isEmpty()
+                || p.kaggleSlug == null
+                || p.kaggleSlug.isEmpty()
+                || !hasKaggleCredentials()) {
+            return;
+        }
+
+        executor.execute(() -> {
+            try {
+                String endpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/status?userName="
+                                + Uri.encode(p.kaggleOwner)
+                                + "&kernelSlug="
+                                + Uri.encode(p.kaggleSlug);
+
+                String raw = kaggleRequestRaw(
+                        "GET", endpoint, null);
+                String state = extractKaggleStatus(raw);
+                String normalized =
+                        state.toLowerCase(Locale.ROOT);
+
+                if (normalized.contains("complete")
+                        || normalized.contains("success")) {
+                    p.status = "CONCLUÍDO";
+                    p.progress = 100;
+                    p.stage = "Vídeo pronto no Kaggle";
+                    p.connectionWarning = "";
+                } else if (normalized.contains("error")
+                        || normalized.contains("fail")) {
+                    p.status = "ERRO";
+                    p.progress = 0;
+                    p.stage = "A execução do Kaggle falhou";
+                } else if (normalized.contains("queue")
+                        || normalized.contains("pending")) {
+                    p.status = "NA FILA";
+                    p.progress = Math.max(p.progress, 10);
+                    p.stage = "Aguardando GPU do Kaggle";
+                } else {
+                    p.status = "GERANDO";
+                    p.progress = Math.max(p.progress, 35);
+                    p.stage = "Kaggle está gerando o vídeo";
+                }
+
+                saveProject(p);
+                runOnUiThread(() -> showProject(p));
+            } catch (Exception e) {
+                p.connectionWarning = compact(e.getMessage());
+                saveProject(p);
+                runOnUiThread(() -> showProject(p));
+            }
+        });
+    }
+
+    private String extractKaggleStatus(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return "running";
+        }
+
+        try {
+            JSONObject o = new JSONObject(raw);
+            String[] keys = {
+                    "status",
+                    "state",
+                    "workerStatus",
+                    "kernelWorkerStatus"
+            };
+            for (String key : keys) {
+                String value = o.optString(key, "");
+                if (!value.isEmpty()) return value;
+            }
+
+            String text = o.toString();
+            String upper = text.toUpperCase(Locale.ROOT);
+            if (upper.contains("COMPLETE")) return "complete";
+            if (upper.contains("ERROR")) return "error";
+            if (upper.contains("QUEUE")) return "queued";
+            if (upper.contains("RUN")) return "running";
+        } catch (Exception ignored) {
+            String upper = raw.toUpperCase(Locale.ROOT);
+            if (upper.contains("COMPLETE")) return "complete";
+            if (upper.contains("ERROR")) return "error";
+            if (upper.contains("QUEUE")) return "queued";
+        }
+        return "running";
+    }
+
+    private String kaggleRequestRaw(
+            String method,
+            String endpoint,
+            JSONObject body) throws Exception {
+        String username =
+                prefs.getString(KAGGLE_USERNAME, "").trim();
+        String apiKey = getKaggleApiKey();
+
+        if (username.isEmpty() || apiKey.isEmpty()) {
+            throw new IllegalStateException(
+                    "Conta Kaggle não conectada");
+        }
+
+        HttpURLConnection connection =
+                (HttpURLConnection)
+                        new URL(endpoint).openConnection();
+        connection.setRequestMethod(method);
+        connection.setConnectTimeout(20000);
+        connection.setReadTimeout(120000);
+        connection.setRequestProperty(
+                "Accept", "application/json");
+
+        String credentials = username + ":" + apiKey;
+        String basic = Base64.encodeToString(
+                credentials.getBytes(StandardCharsets.UTF_8),
+                Base64.NO_WRAP);
+        connection.setRequestProperty(
+                "Authorization", "Basic " + basic);
+
+        if (body != null) {
+            connection.setDoOutput(true);
+            connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=utf-8");
+            try (OutputStream os =
+                         connection.getOutputStream()) {
+                os.write(
+                        body.toString()
+                                .getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        int code = connection.getResponseCode();
+        InputStream stream =
+                code >= 200 && code < 300
+                        ? connection.getInputStream()
+                        : connection.getErrorStream();
+
+        String response = readAll(stream);
+
+        if (code < 200 || code >= 300) {
+            String detail = response;
+            try {
+                JSONObject error = new JSONObject(response);
+                detail = error.optString(
+                        "message",
+                        error.optString("detail", response));
+            } catch (Exception ignored) {}
+
+            throw new IllegalStateException(
+                    "Kaggle HTTP "
+                            + code
+                            + (detail == null || detail.isEmpty()
+                            ? ""
+                            : ": " + detail));
+        }
+
+        return response == null ? "" : response;
+    }
+
+    private String readAssetText(String name) throws Exception {
+        try (InputStream in = getAssets().open(name);
+             BufferedReader reader =
+                     new BufferedReader(
+                             new InputStreamReader(
+                                     in,
+                                     StandardCharsets.UTF_8))) {
+            StringBuilder out = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                out.append(line).append('\n');
+            }
+            return out.toString();
+        }
     }
 
     private void copyKaggleConfigAndOpen(Project p) {
@@ -1544,6 +2054,9 @@ public class MainActivity extends Activity {
         o.put("stage", p.stage);
         o.put("output_url", p.outputUrl);
         o.put("connection_warning", p.connectionWarning);
+        o.put("kaggle_owner", p.kaggleOwner);
+        o.put("kaggle_slug", p.kaggleSlug);
+        o.put("kaggle_output_page", p.kaggleOutputPage);
 
         JSONArray scenes = new JSONArray();
         for (Scene s : p.scenes) {
@@ -1581,6 +2094,9 @@ public class MainActivity extends Activity {
         p.stage = o.optString("stage", "");
         p.outputUrl = o.optString("output_url", "");
         p.connectionWarning = o.optString("connection_warning", "");
+        p.kaggleOwner = o.optString("kaggle_owner", "");
+        p.kaggleSlug = o.optString("kaggle_slug", "");
+        p.kaggleOutputPage = o.optString("kaggle_output_page", "");
 
         JSONArray scenes = o.optJSONArray("scenes");
         if (scenes != null) {
@@ -2014,6 +2530,9 @@ public class MainActivity extends Activity {
         String stage = "";
         String outputUrl = "";
         String connectionWarning = "";
+        String kaggleOwner = "";
+        String kaggleSlug = "";
+        String kaggleOutputPage = "";
         final List<Scene> scenes = new ArrayList<>();
     }
 }

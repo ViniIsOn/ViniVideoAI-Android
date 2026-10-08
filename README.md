@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.4 — limpeza segura do Kaggle
+
+- Cada execução direta recebe um **limite automático de sessão** entre 30 e 60 minutos.
+- Excluir um projeto com kernel Kaggle associado tenta primeiro remover o kernel remoto.
+- O projeto local só é apagado depois que o Kaggle confirma a remoção.
+- Se a limpeza remota falhar, o projeto fica salvo para o usuário não perder o controle.
+- Mensagens de erro 403 agora orientam sobre permissões `kernels.get` e `kernels.delete`.
+
+
+
 ## v0.7.2 — GPU e internet automáticos
 
 - O app verifica se o aparelho tem internet antes de enviar.

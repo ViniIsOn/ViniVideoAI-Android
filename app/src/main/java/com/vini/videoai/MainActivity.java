@@ -100,7 +100,11 @@ public class MainActivity extends Activity {
     private static final String KAGGLE_TOKEN_SCOPES = "kaggle_token_scopes";
     private static final String KAGGLE_SCOPES_OK = "kaggle_scopes_ok";
     private static final String KAGGLE_KEY_ALIAS = "vinivideo_kaggle_key";
-    private static final String KAGGLE_API_BASE = "https://www.kaggle.com/api/v1";
+    private static final String KAGGLE_API_BASE = "https://api.kaggle.com/v1";
+    private static final String KAGGLE_SAVE_KERNEL =
+            KAGGLE_API_BASE + "/kernels.KernelsApiService/SaveKernel";
+    private static final String KAGGLE_DELETE_KERNEL =
+            KAGGLE_API_BASE + "/kernels.KernelsApiService/DeleteKernel";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -1260,7 +1264,7 @@ public class MainActivity extends Activity {
                 try {
                     kaggleRequestRaw(
                             "POST",
-                            KAGGLE_API_BASE + "/kernels/push",
+                            KAGGLE_SAVE_KERNEL,
                             body);
                 } catch (Exception firstError) {
                     String firstMessage = compact(firstError.getMessage());
@@ -1283,7 +1287,7 @@ public class MainActivity extends Activity {
 
                     kaggleRequestRaw(
                             "POST",
-                            KAGGLE_API_BASE + "/kernels/push",
+                            KAGGLE_SAVE_KERNEL,
                             body);
                 }
                 created = true;
@@ -1294,13 +1298,13 @@ public class MainActivity extends Activity {
                     Thread.currentThread().interrupt();
                 }
 
-                String deleteEndpoint =
-                        KAGGLE_API_BASE
-                                + "/kernels/delete/"
-                                + Uri.encode(username)
-                                + "/"
-                                + Uri.encode(testSlug);
-                kaggleRequestRaw("POST", deleteEndpoint, null);
+                JSONObject deleteBody = new JSONObject();
+                deleteBody.put("userName", username);
+                deleteBody.put("kernelSlug", testSlug);
+                kaggleRequestRaw(
+                        "POST",
+                        KAGGLE_DELETE_KERNEL,
+                        deleteBody);
                 created = false;
 
                 prefs.edit()
@@ -1319,13 +1323,14 @@ public class MainActivity extends Activity {
 
                 if (created) {
                     try {
-                        String deleteEndpoint =
-                                KAGGLE_API_BASE
-                                        + "/kernels/delete/"
-                                        + Uri.encode(username)
-                                        + "/"
-                                        + Uri.encode(testSlug);
-                        kaggleRequestRaw("POST", deleteEndpoint, null);
+                        JSONObject deleteBody =
+                                new JSONObject();
+                        deleteBody.put("userName", username);
+                        deleteBody.put("kernelSlug", testSlug);
+                        kaggleRequestRaw(
+                                "POST",
+                                KAGGLE_DELETE_KERNEL,
+                                deleteBody);
                     } catch (Exception ignored) {}
                 }
 
@@ -1470,7 +1475,7 @@ public class MainActivity extends Activity {
 
                 kaggleRequestRaw(
                         "POST",
-                        KAGGLE_API_BASE + "/kernels/push",
+                        KAGGLE_SAVE_KERNEL,
                         body);
 
                 p.status = "ENVIADO";
@@ -2264,14 +2269,14 @@ public class MainActivity extends Activity {
 
         executor.execute(() -> {
             try {
-                String endpoint =
-                        KAGGLE_API_BASE
-                                + "/kernels/delete/"
-                                + Uri.encode(p.kaggleOwner)
-                                + "/"
-                                + Uri.encode(p.kaggleSlug);
+                JSONObject deleteBody = new JSONObject();
+                deleteBody.put("userName", p.kaggleOwner);
+                deleteBody.put("kernelSlug", p.kaggleSlug);
 
-                kaggleRequestRaw("POST", endpoint, null);
+                kaggleRequestRaw(
+                        "POST",
+                        KAGGLE_DELETE_KERNEL,
+                        deleteBody);
 
                 deleteProject(p.id);
                 runOnUiThread(() -> {

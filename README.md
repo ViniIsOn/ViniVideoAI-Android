@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.9 — API oficial atual do Kaggle
+
+- Troca rotas antigas `www.kaggle.com/api/v1/...` pelas rotas RPC atuais em `https://api.kaggle.com/v1`.
+- Criação/execução usa `kernels.KernelsApiService/SaveKernel`.
+- Exclusão/limpeza usa `kernels.KernelsApiService/DeleteKernel`.
+- Mantém Bearer Personal API Token.
+- Corrige o 404 HTML retornado pelas rotas antigas.
+
+
+
 ## v0.7.8 — evitar conflito 409 no teste Kaggle
 
 - Kernel de teste agora usa **slug e título únicos**.

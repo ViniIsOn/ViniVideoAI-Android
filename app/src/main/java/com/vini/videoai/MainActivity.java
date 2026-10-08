@@ -1257,9 +1257,8 @@ public class MainActivity extends Activity {
                 body.put("language", "python");
                 body.put("kernelType", "script");
                 body.put("isPrivate", true);
-                body.put("enableGpu", false);
-                body.put("enableTpu", false);
                 body.put("enableInternet", false);
+                body.put("kernelExecutionType", "QUICK_SAVE");
 
                 try {
                     kaggleRequestRaw(
@@ -1419,6 +1418,7 @@ public class MainActivity extends Activity {
                 "vinivideo-"
                         + p.id.substring(0, Math.min(8, p.id.length()))
                         .toLowerCase(Locale.ROOT);
+        String kernelTitle = slug;
 
         p.kaggleOwner = username;
         p.kaggleSlug = slug;
@@ -1461,15 +1461,14 @@ public class MainActivity extends Activity {
 
                 JSONObject body = new JSONObject();
                 body.put("slug", username + "/" + slug);
-                body.put("newTitle", "ViniVideo AI " + slug);
+                body.put("newTitle", kernelTitle);
                 body.put("text", script);
                 body.put("language", "python");
                 body.put("kernelType", "script");
                 body.put("isPrivate", true);
-                body.put("enableGpu", true);
-                body.put("enableTpu", false);
                 body.put("enableInternet", true);
                 body.put("machineShape", "NvidiaTeslaT4");
+                body.put("kernelExecutionType", "SAVE_AND_RUN_ALL");
                 int sessionTimeoutSeconds;
                 if ("MAXIMA".equals(profile)) {
                     sessionTimeoutSeconds = 2700;
@@ -1532,8 +1531,8 @@ public class MainActivity extends Activity {
                 p.status = "ENVIADO";
                 p.progress = 15;
                 p.stage = p.kaggleOutputPage.isEmpty()
-                        ? "Kaggle aceitou a execução, mas não devolveu ref/URL do notebook."
-                        : "Enviado ao Kaggle • notebook confirmado • modo " + profile + " • GPU T4 solicitada";
+                        ? "Kaggle recebeu o kernel e iniciou SAVE_AND_RUN_ALL; URL não devolvida."
+                        : "Kaggle iniciou SAVE_AND_RUN_ALL • GPU T4 • modo " + profile;
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));

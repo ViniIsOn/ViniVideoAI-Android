@@ -1,5 +1,14 @@
 # ViniVideo AI
 
+## v0.8.1 — usar URL real devolvida pelo Kaggle
+
+- O app não monta mais a URL do notebook/resultado manualmente.
+- A resposta de `SaveKernel` é lida e o app salva o `url` e o `ref` reais devolvidos pelo Kaggle.
+- O botão **Abrir execução real no Kaggle** usa exatamente essa URL oficial.
+- Corrige páginas 404 causadas por slug/URL reconstruídos no app.
+
+
+
 ## v0.8.0 — mais rápido e menos travado
 
 - **Rápido** agora usa 10 steps, 41 frames e resolução 288×512 / 512×288.

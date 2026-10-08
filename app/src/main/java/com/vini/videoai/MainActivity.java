@@ -688,6 +688,15 @@ public class MainActivity extends Activity {
                 (p.stage == null || p.stage.isEmpty()) ? "Aguardando" : p.stage,
                 p.status.equalsIgnoreCase("ERRO") ? danger : muted));
 
+        if ("ENVIADO".equalsIgnoreCase(p.status)
+                && p.kaggleSlug != null
+                && !p.kaggleSlug.isEmpty()) {
+            previewCard.addView(small(
+                    "✓ O Kaggle recebeu a execução. O app não fica consultando o status porque essa API pode devolver 403 indevidamente. "
+                            + "A GPU encerra automaticamente quando o script termina; o limite de sessão continua ativo.",
+                    green), margin(-1, -2, 8, 0));
+        }
+
         if (p.connectionWarning != null && !p.connectionWarning.isEmpty()) {
             previewCard.addView(small(
                     "Status remoto indisponível: " + p.connectionWarning
@@ -742,10 +751,9 @@ public class MainActivity extends Activity {
 
         if (p.kaggleOutputPage != null
                 && !p.kaggleOutputPage.isEmpty()
-                && isTerminal(p.status)
                 && !p.status.toUpperCase(Locale.ROOT).contains("ERRO")) {
             Button openKaggleOutput = button(
-                    "⬇ ABRIR RESULTADO DO KAGGLE",
+                    "↗ ABRIR EXECUÇÃO / RESULTADO NO KAGGLE",
                     cyanDark, cyan);
             openKaggleOutput.setOnClickListener(v -> {
                 try {
@@ -806,9 +814,8 @@ public class MainActivity extends Activity {
         if (!p.jobId.isEmpty() && !isTerminal(p.status)) {
             handler.postDelayed(() -> refreshProject(p), 4000);
         }
-        if (!p.kaggleSlug.isEmpty() && !isTerminal(p.status)) {
-            handler.postDelayed(() -> refreshKaggleProject(p), 8000);
-        }
+        // Não consultamos kernels/status aqui: o Kaggle pode retornar
+        // kernels.get = 403 até para o dono. A execução continua no Kaggle.
     }
 
     private void showSceneDetail(Scene scene) {
@@ -901,17 +908,17 @@ public class MainActivity extends Activity {
         kaggleDirect.addView(kaggleToken, margin(-1, dp(54), 0, 8));
 
         kaggleDirect.addView(small(
-                "O app vai testar de verdade a conta criando um kernel privado minúsculo SEM GPU, "
-                        + "consultando o status e apagando-o em seguida. "
-                        + "Só libera geração se as três etapas funcionarem.",
+                "O Kaggle tem um bug conhecido na consulta de status (kernels.get). "
+                        + "Por isso o app testa só o que precisa para trabalhar com segurança: "
+                        + "criar um kernel privado SEM GPU e apagá-lo logo depois.",
                 muted), margin(-1, -2, 0, 8));
 
         boolean connectionOk = prefs.getBoolean(KAGGLE_SCOPES_OK, false);
         if (hasSavedKaggleToken) {
             kaggleDirect.addView(small(
                     connectionOk
-                            ? "✓ Kaggle testado: criar/executar, acompanhar e limpar estão funcionando."
-                            : "⚠ Token salvo, mas o teste completo ainda não passou.",
+                            ? "✓ Kaggle pronto: criar/executar e limpar funcionam."
+                            : "⚠ Token salvo, mas o teste seguro ainda não passou.",
                     connectionOk ? green : gold), margin(-1, -2, 0, 8));
         }
 
@@ -931,7 +938,7 @@ public class MainActivity extends Activity {
 
         Button connectKaggle = button(
                 hasSavedKaggleToken
-                        ? "✓ TESTAR CONEXÃO COMPLETA"
+                        ? "✓ TESTAR KAGGLE"
                         : "CONECTAR E TESTAR",
                 cyan, bg);
         connectKaggle.setOnClickListener(v -> {
@@ -1255,14 +1262,6 @@ public class MainActivity extends Activity {
                     Thread.currentThread().interrupt();
                 }
 
-                String statusEndpoint =
-                        KAGGLE_API_BASE
-                                + "/kernels/status?userName="
-                                + Uri.encode(username)
-                                + "&kernelSlug="
-                                + Uri.encode(testSlug);
-                kaggleRequestRaw("GET", statusEndpoint, null);
-
                 String deleteEndpoint =
                         KAGGLE_API_BASE
                                 + "/kernels/delete/"
@@ -1278,7 +1277,7 @@ public class MainActivity extends Activity {
                         .apply();
 
                 runOnUiThread(() -> {
-                    toast("Kaggle pronto ✓ Teste completo passou");
+                    toast("Kaggle pronto ✓ Criar e limpar funcionam");
                     showSettings();
                 });
             } catch (Exception e) {
@@ -1314,24 +1313,18 @@ public class MainActivity extends Activity {
         if (error == null) return "Falha desconhecida ao testar o Kaggle.";
         String lower = error.toLowerCase(Locale.ROOT);
 
-        if (lower.contains("kernels.get") || lower.contains("status")) {
-            return "O token conseguiu criar a execução, mas não consegue consultar o status. "
-                    + "O Kaggle retornou: " + error;
-        }
         if (lower.contains("kernels.delete") || lower.contains("delete")) {
-            return "O token consegue acessar o kernel, mas não conseguiu apagá-lo. "
+            return "O token conseguiu criar o kernel, mas não conseguiu limpá-lo. "
                     + "O Kaggle retornou: " + error;
         }
         if (lower.contains("403")) {
-            return "O Kaggle recusou uma das operações necessárias. "
-                    + "O token é válido, mas esta operação não foi autorizada: " + error;
+            return "O Kaggle recusou uma operação necessária para criar ou limpar kernels: " + error;
         }
         if (lower.contains("401")) {
             return "O Personal API Token não foi aceito. Gere um novo token em Settings → API Tokens e tente novamente.";
         }
         if (lower.contains("404")) {
-            return "A API do Kaggle não encontrou a operação esperada. "
-                    + "Isso pode ser uma incompatibilidade temporária da API: " + error;
+            return "A API do Kaggle não encontrou a operação esperada: " + error;
         }
         return error;
     }
@@ -1358,13 +1351,13 @@ public class MainActivity extends Activity {
         if (!hasKaggleDirectAccess()) {
             p.status = "KAGGLE NÃO TESTADO";
             p.progress = 0;
-            p.stage = "Teste a conexão completa do Kaggle antes de gerar";
+            p.stage = "Teste criar/limpar no Kaggle antes de gerar";
             saveProject(p);
 
             new AlertDialog.Builder(this)
                     .setTitle("Teste o Kaggle primeiro")
                     .setMessage(
-                            "Antes de gastar GPU, o app precisa provar que consegue criar, acompanhar e limpar um kernel de teste sem GPU.")
+                            "Antes de gastar GPU, o app precisa provar que consegue criar e limpar um kernel privado de teste sem GPU.")
                     .setNegativeButton("Agora não", null)
                     .setPositiveButton(
                             "Testar",
@@ -1443,9 +1436,9 @@ public class MainActivity extends Activity {
                         KAGGLE_API_BASE + "/kernels/push",
                         body);
 
-                p.status = "NA FILA";
-                p.progress = 8;
-                p.stage = "Kaggle recebeu o prompt • GPU T4 solicitada • limite automático de sessão ativo";
+                p.status = "ENVIADO";
+                p.progress = 15;
+                p.stage = "Enviado ao Kaggle • GPU T4 solicitada • a sessão encerra sozinha ao terminar ou no limite de segurança";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));

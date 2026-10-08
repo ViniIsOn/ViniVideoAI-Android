@@ -692,6 +692,16 @@ public class MainActivity extends Activity {
                     danger), margin(-1, -2, 8, 0));
         }
 
+        if (isTerminal(p.status)
+                && !p.status.toUpperCase(Locale.ROOT).contains("ERRO")
+                && p.kaggleSlug != null
+                && !p.kaggleSlug.isEmpty()) {
+            previewCard.addView(small(
+                    "✓ Geração finalizada — a sessão de GPU do Kaggle foi encerrada/liberada. "
+                            + "O Wi‑Fi do celular permanece como estava.",
+                    green), margin(-1, -2, 8, 0));
+        }
+
         LinearLayout details = card();
         details.setVisibility(View.GONE);
         sectionLabel(details, "DETALHES DO PROJETO");
@@ -1343,7 +1353,7 @@ public class MainActivity extends Activity {
                         || normalized.contains("success")) {
                     p.status = "CONCLUÍDO";
                     p.progress = 100;
-                    p.stage = "Vídeo pronto no Kaggle";
+                    p.stage = "Vídeo pronto • GPU do Kaggle liberada";
                     p.connectionWarning = "";
                 } else if (normalized.contains("error")
                         || normalized.contains("fail")) {

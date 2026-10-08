@@ -1,5 +1,17 @@
 # ViniVideo AI
 
+## v0.8.6 — progresso vivo durante RUNNING
+
+- A UI não depende mais de uma nova resposta do Kaggle para mexer.
+- Enquanto o estado real for `GERANDO`, o app atualiza **a cada 1 segundo**:
+  - tempo decorrido;
+  - fase estimada;
+  - barra estimada.
+- O polling real do Kaggle continua separado, a cada 7 segundos.
+- A estimativa continua explicitamente marcada como estimativa, não progresso interno real do modelo.
+
+
+
 ## v0.8.5 — espera menos chata
 
 - Enquanto o Kaggle só informa `RUNNING`, o app mostra:

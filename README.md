@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.1 — prompt ao vivo
+
+- Corrige geração usando rascunho antigo.
+- O botão **Gerar vídeo** lê o texto que está visível na tela naquele exato momento.
+- Remove o exemplo antigo “uma arara azul conhece um novo amigo...” do notebook manual.
+- O runner direto imprime nos logs o prompt exato que recebeu.
+- O status do projeto mostra um resumo do prompt enviado ao Kaggle.
+
+
+
 ## v0.7 — Kaggle Direto
 
 - O botão **Gerar vídeo** não usa mais copiar/colar como fluxo principal.

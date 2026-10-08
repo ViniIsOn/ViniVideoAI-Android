@@ -16,7 +16,10 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Base64;
 import android.view.Gravity;
@@ -50,6 +53,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -58,6 +62,11 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 public class MainActivity extends Activity {
     private static final int PICK_IMAGE = 10;
@@ -80,6 +89,11 @@ public class MainActivity extends Activity {
     private static final String DRAFT_CONTINUITY = "draft_continuity";
     private static final String DRAFT_AUDIO = "draft_audio";
     private static final String DRAFT_STYLE = "draft_style";
+
+    private static final String KAGGLE_USERNAME = "kaggle_username";
+    private static final String KAGGLE_KEY_ENC = "kaggle_key_enc";
+    private static final String KAGGLE_KEY_ALIAS = "vinivideo_kaggle_key";
+    private static final String KAGGLE_API_BASE = "https://www.kaggle.com/api/v1";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -298,16 +312,16 @@ public class MainActivity extends Activity {
             saveDraftNow();
 
             Project p = projectFromDraft();
-            p.status = "KAGGLE";
-            p.progress = 0;
-            p.stage = "Abra o Kaggle, cole a configuração e use Run All";
+            p.status = "PREPARANDO";
+            p.progress = 1;
+            p.stage = "Preparando envio direto ao Kaggle";
             saveProject(p);
-            copyKaggleConfigAndOpen(p);
+            submitKaggleProjectDirect(p);
         });
         root.addView(generate, margin(-1, dp(62), 0, 10));
 
         root.addView(small(
-                "Fluxo simples: escreva → gerar → no Kaggle cole a configuração → Run All → baixe o MP4 → importe no projeto.",
+                "Fluxo simples: escreva → gerar. O app envia o prompt e inicia o Kaggle sozinho. Sem copiar e colar.",
                 muted), margin(-1, -2, 0, 8));
 
         Button save = button("Salvar rascunho como projeto", panelAlt, text);
@@ -689,8 +703,8 @@ public class MainActivity extends Activity {
         root.addView(detailsButton, margin(-1, dp(50), 0, 8));
         root.addView(details, margin(-1, -2, 0, 12));
 
-        Button kaggleAgain = button("🎬 GERAR NO KAGGLE QUALIDADE", cyanDark, cyan);
-        kaggleAgain.setOnClickListener(v -> copyKaggleConfigAndOpen(p));
+        Button kaggleAgain = button("🎬 GERAR DIRETO NO KAGGLE", cyanDark, cyan);
+        kaggleAgain.setOnClickListener(v -> submitKaggleProjectDirect(p));
         root.addView(kaggleAgain, margin(-1, dp(56), 0, 8));
 
         Button importKaggle = button(
@@ -737,6 +751,9 @@ public class MainActivity extends Activity {
 
         if (!p.jobId.isEmpty() && !isTerminal(p.status)) {
             handler.postDelayed(() -> refreshProject(p), 4000);
+        }
+        if (!p.kaggleSlug.isEmpty() && !isTerminal(p.status)) {
+            handler.postDelayed(() -> refreshKaggleProject(p), 8000);
         }
     }
 
@@ -1544,6 +1561,9 @@ public class MainActivity extends Activity {
         o.put("stage", p.stage);
         o.put("output_url", p.outputUrl);
         o.put("connection_warning", p.connectionWarning);
+        o.put("kaggle_owner", p.kaggleOwner);
+        o.put("kaggle_slug", p.kaggleSlug);
+        o.put("kaggle_output_page", p.kaggleOutputPage);
 
         JSONArray scenes = new JSONArray();
         for (Scene s : p.scenes) {
@@ -1581,6 +1601,9 @@ public class MainActivity extends Activity {
         p.stage = o.optString("stage", "");
         p.outputUrl = o.optString("output_url", "");
         p.connectionWarning = o.optString("connection_warning", "");
+        p.kaggleOwner = o.optString("kaggle_owner", "");
+        p.kaggleSlug = o.optString("kaggle_slug", "");
+        p.kaggleOutputPage = o.optString("kaggle_output_page", "");
 
         JSONArray scenes = o.optJSONArray("scenes");
         if (scenes != null) {
@@ -2014,6 +2037,9 @@ public class MainActivity extends Activity {
         String stage = "";
         String outputUrl = "";
         String connectionWarning = "";
+        String kaggleOwner = "";
+        String kaggleSlug = "";
+        String kaggleOutputPage = "";
         final List<Scene> scenes = new ArrayList<>();
     }
 }

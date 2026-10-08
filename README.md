@@ -1,5 +1,17 @@
 # ViniVideo AI
 
+## v0.8.5 — espera menos chata
+
+- Enquanto o Kaggle só informa `RUNNING`, o app mostra:
+  - tempo decorrido;
+  - fase visual estimada;
+  - porcentagem estimada de 35% a 95%.
+- As fases mudam entre carregamento, geração de frames, continuidade e finalização do MP4.
+- A interface deixa claro que essa porcentagem é **estimativa**, não progresso exato do modelo.
+- O estado real continua vindo do Kaggle a cada 7 segundos.
+
+
+
 ## v0.8.4 — status real do Kaggle
 
 - Remove a barra congelada/falsa de 15%.

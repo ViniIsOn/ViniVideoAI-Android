@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.6 — teste real do Kaggle antes da GPU
+
+- Remove a checagem incorreta de escopos do Personal API Token.
+- Ao conectar, o app cria um kernel privado minúsculo **sem GPU**, consulta o status e apaga o kernel.
+- A geração de vídeo só é liberada se criar/executar, acompanhar e limpar funcionarem de verdade.
+- Se o teste falhar, nenhuma GPU é usada.
+- Mensagens de erro agora diferenciam falha de status, limpeza, autenticação e incompatibilidade da API.
+
+
+
 ## v0.7.5 — verificar permissões antes de gerar
 
 - Kaggle Direto passa a usar **Personal API Token (Bearer)**.

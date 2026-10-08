@@ -707,6 +707,27 @@ public class MainActivity extends Activity {
         kaggleAgain.setOnClickListener(v -> submitKaggleProjectDirect(p));
         root.addView(kaggleAgain, margin(-1, dp(56), 0, 8));
 
+        if (p.kaggleOutputPage != null
+                && !p.kaggleOutputPage.isEmpty()
+                && isTerminal(p.status)
+                && !p.status.toUpperCase(Locale.ROOT).contains("ERRO")) {
+            Button openKaggleOutput = button(
+                    "⬇ ABRIR RESULTADO DO KAGGLE",
+                    cyanDark, cyan);
+            openKaggleOutput.setOnClickListener(v -> {
+                try {
+                    startActivity(new Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(p.kaggleOutputPage)));
+                } catch (Exception e) {
+                    toast("Não consegui abrir o resultado do Kaggle.");
+                }
+            });
+            root.addView(
+                    openKaggleOutput,
+                    margin(-1, dp(54), 0, 8));
+        }
+
         Button importKaggle = button(
                 hasImportedVideo
                         ? "📥 TROCAR RESULTADO DO KAGGLE"
@@ -716,7 +737,7 @@ public class MainActivity extends Activity {
         root.addView(importKaggle, margin(-1, dp(54), 0, 10));
 
         if (p.jobId.isEmpty() && p.outputUrl.isEmpty() && !hasImportedVideo) {
-            Button generate = button("GERAR VÍDEO", cyan, bg);
+            Button generate = button("AVANÇADO: BACKEND PRÓPRIO", panelAlt, text);
             generate.setOnClickListener(v -> {
                 if (prefs.getString(BACKEND, "").trim().isEmpty()) {
                     showBackendRequired();
@@ -939,7 +960,7 @@ public class MainActivity extends Activity {
         pasteUrl.setOnClickListener(v -> pasteColabUrlAndTest(url, key));
         c.addView(pasteUrl, margin(-1, dp(54), 0, 8));
 
-        Button kaggleQuality = button("🎬 KAGGLE QUALIDADE — WAN 2.1", cyanDark, cyan);
+        Button kaggleQuality = button("🧰 KAGGLE MANUAL — FALLBACK", panelAlt, text);
         kaggleQuality.setOnClickListener(v -> openKaggleQuality());
         c.addView(kaggleQuality, margin(-1, dp(54), 0, 8));
 
@@ -948,7 +969,7 @@ public class MainActivity extends Activity {
         c.addView(kaggle, margin(-1, dp(54), 0, 8));
 
         c.addView(small(
-                "Kaggle Qualidade usa Wan 2.1 e prioriza consistência e detalhe. Kaggle Rápido usa AnimateDiff-Lightning. Os dois geram o MP4 dentro do Kaggle e mostram um link para baixar.",
+                "O Kaggle Direto acima é o fluxo principal. Os botões abaixo ficam apenas como fallback manual se a API estiver indisponível.",
                 muted), margin(-1, -2, 0, 12));
 
         Button save = button("Salvar", panelAlt, text);

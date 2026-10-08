@@ -757,7 +757,7 @@ public class MainActivity extends Activity {
                 && !p.kaggleOutputPage.isEmpty()
                 && !p.status.toUpperCase(Locale.ROOT).contains("ERRO")) {
             Button openKaggleOutput = button(
-                    "↗ ABRIR EXECUÇÃO / RESULTADO NO KAGGLE",
+                    "↗ ABRIR EXECUÇÃO REAL NO KAGGLE",
                     cyanDark, cyan);
             openKaggleOutput.setOnClickListener(v -> {
                 try {
@@ -1422,9 +1422,7 @@ public class MainActivity extends Activity {
 
         p.kaggleOwner = username;
         p.kaggleSlug = slug;
-        p.kaggleOutputPage =
-                "https://www.kaggle.com/code/"
-                        + username + "/" + slug + "/output";
+        p.kaggleOutputPage = "";
 
         saveProject(p);
         showProject(p);
@@ -1482,14 +1480,50 @@ public class MainActivity extends Activity {
                 }
                 body.put("sessionTimeoutSeconds", sessionTimeoutSeconds);
 
-                kaggleRequestRaw(
+                String saveResponse = kaggleRequestRaw(
                         "POST",
                         KAGGLE_SAVE_KERNEL,
                         body);
 
+                String returnedUrl = "";
+                String returnedRef = "";
+                try {
+                    JSONObject saved = new JSONObject(saveResponse);
+                    returnedUrl = saved.optString("url", "").trim();
+                    returnedRef = saved.optString("ref", "").trim();
+                } catch (Exception ignored) {}
+
+                p.kaggleRef = returnedRef;
+
+                if (!returnedRef.isEmpty() && returnedRef.contains("/")) {
+                    String[] parts = returnedRef.split("/", 2);
+                    if (parts.length == 2) {
+                        p.kaggleOwner = parts[0];
+                        p.kaggleSlug = parts[1];
+                    }
+                }
+
+                if (!returnedUrl.isEmpty()) {
+                    if (returnedUrl.startsWith("http://")
+                            || returnedUrl.startsWith("https://")) {
+                        p.kaggleOutputPage = returnedUrl;
+                    } else if (returnedUrl.startsWith("/")) {
+                        p.kaggleOutputPage =
+                                "https://www.kaggle.com" + returnedUrl;
+                    } else {
+                        p.kaggleOutputPage =
+                                "https://www.kaggle.com/" + returnedUrl;
+                    }
+                } else if (!returnedRef.isEmpty()) {
+                    p.kaggleOutputPage =
+                            "https://www.kaggle.com/code/" + returnedRef;
+                }
+
                 p.status = "ENVIADO";
                 p.progress = 15;
-                p.stage = "Enviado ao Kaggle • modo " + profile + " • GPU T4 solicitada • sessão com limite automático";
+                p.stage = p.kaggleOutputPage.isEmpty()
+                        ? "Kaggle aceitou a execução, mas não devolveu uma URL de acompanhamento."
+                        : "Enviado ao Kaggle • modo " + profile + " • GPU T4 solicitada • sessão com limite automático";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -2377,6 +2411,7 @@ public class MainActivity extends Activity {
         o.put("kaggle_owner", p.kaggleOwner);
         o.put("kaggle_slug", p.kaggleSlug);
         o.put("kaggle_output_page", p.kaggleOutputPage);
+        o.put("kaggle_ref", p.kaggleRef);
 
         JSONArray scenes = new JSONArray();
         for (Scene s : p.scenes) {
@@ -2417,6 +2452,7 @@ public class MainActivity extends Activity {
         p.kaggleOwner = o.optString("kaggle_owner", "");
         p.kaggleSlug = o.optString("kaggle_slug", "");
         p.kaggleOutputPage = o.optString("kaggle_output_page", "");
+        p.kaggleRef = o.optString("kaggle_ref", "");
 
         JSONArray scenes = o.optJSONArray("scenes");
         if (scenes != null) {
@@ -2853,6 +2889,7 @@ public class MainActivity extends Activity {
         String kaggleOwner = "";
         String kaggleSlug = "";
         String kaggleOutputPage = "";
+        String kaggleRef = "";
         final List<Scene> scenes = new ArrayList<>();
     }
 }

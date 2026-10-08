@@ -687,8 +687,8 @@ public class MainActivity extends Activity {
 
         if (p.connectionWarning != null && !p.connectionWarning.isEmpty()) {
             previewCard.addView(small(
-                    "Conexão com o motor perdida: " + p.connectionWarning
-                            + "\nA renderização pode continuar no Colab.",
+                    "Status remoto indisponível: " + p.connectionWarning
+                            + "\nSe a execução foi aceita, o Kaggle continua sozinho até concluir ou atingir o limite automático de sessão.",
                     danger), margin(-1, -2, 8, 0));
         }
 
@@ -897,7 +897,10 @@ public class MainActivity extends Activity {
         kaggleDirect.addView(kaggleKey, margin(-1, dp(54), 0, 8));
 
         kaggleDirect.addView(small(
-                "No Kaggle: Settings → API → Create Legacy API Key. O app guarda a key criptografada no Android Keystore.",
+                "A credencial precisa permitir criar/executar, ler status e excluir kernels. "
+                        + "Se faltar kernels.get, o app não consegue acompanhar a geração; "
+                        + "se faltar kernels.delete, não consegue fazer a limpeza automática. "
+                        + "A chave continua criptografada no Android Keystore.",
                 muted), margin(-1, -2, 0, 10));
 
         Button connectKaggle = button(
@@ -1302,6 +1305,10 @@ public class MainActivity extends Activity {
                 body.put("enableTpu", false);
                 body.put("enableInternet", true);
                 body.put("machineShape", "NvidiaTeslaT4");
+                int sessionTimeoutSeconds = Math.max(
+                        1800,
+                        Math.min(3600, p.durationSeconds * 180));
+                body.put("sessionTimeoutSeconds", sessionTimeoutSeconds);
 
                 kaggleRequestRaw(
                         "POST",
@@ -1310,7 +1317,7 @@ public class MainActivity extends Activity {
 
                 p.status = "NA FILA";
                 p.progress = 8;
-                p.stage = "Kaggle recebeu o prompt • Internet ON • GPU T4 solicitada";
+                p.stage = "Kaggle recebeu o prompt • GPU T4 solicitada • limite automático de sessão ativo";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -2066,15 +2073,73 @@ public class MainActivity extends Activity {
     }
 
     private void confirmDelete(Project p) {
+        boolean hasRemoteKaggle =
+                p.kaggleOwner != null
+                        && !p.kaggleOwner.isEmpty()
+                        && p.kaggleSlug != null
+                        && !p.kaggleSlug.isEmpty();
+
+        String message = hasRemoteKaggle
+                ? "Este projeto também tem uma execução/kernel no Kaggle. "
+                        + "O app vai tentar remover primeiro o kernel remoto. "
+                        + "Só depois de o Kaggle confirmar a limpeza o projeto some do aparelho."
+                : "O projeto será removido do histórico deste aparelho.";
+
         new AlertDialog.Builder(this)
                 .setTitle("Excluir projeto?")
-                .setMessage("O projeto será removido do histórico deste aparelho.")
+                .setMessage(message)
                 .setNegativeButton("Cancelar", null)
                 .setPositiveButton("Excluir", (d, w) -> {
-                    deleteProject(p.id);
-                    showProjects();
+                    if (hasRemoteKaggle && hasKaggleCredentials()) {
+                        cleanupKaggleAndDeleteProject(p);
+                    } else if (hasRemoteKaggle) {
+                        new AlertDialog.Builder(this)
+                                .setTitle("Kaggle não conectado")
+                                .setMessage(
+                                        "Não vou apagar só o registro local enquanto existe um kernel associado. "
+                                                + "Conecte o Kaggle para o app tentar limpar a execução primeiro.")
+                                .setPositiveButton("OK", null)
+                                .show();
+                    } else {
+                        deleteProject(p.id);
+                        showProjects();
+                    }
                 })
                 .show();
+    }
+
+    private void cleanupKaggleAndDeleteProject(Project p) {
+        toast("Limpando execução do Kaggle…");
+
+        executor.execute(() -> {
+            try {
+                String endpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/delete/"
+                                + Uri.encode(p.kaggleOwner)
+                                + "/"
+                                + Uri.encode(p.kaggleSlug);
+
+                kaggleRequestRaw("POST", endpoint, null);
+
+                deleteProject(p.id);
+                runOnUiThread(() -> {
+                    toast("Projeto e kernel do Kaggle removidos ✓");
+                    showProjects();
+                });
+            } catch (Exception e) {
+                String error = compact(e.getMessage());
+                runOnUiThread(() -> new AlertDialog.Builder(this)
+                        .setTitle("Não consegui limpar o Kaggle")
+                        .setMessage(
+                                error
+                                        + "\n\nO projeto NÃO foi removido do aparelho. "
+                                        + "Assim você ainda mantém o controle dele. "
+                                        + "Se aparecer erro de permissão, a credencial precisa permitir kernels.delete.")
+                        .setPositiveButton("OK", null)
+                        .show());
+            }
+        });
     }
 
     private void saveProject(Project project) {

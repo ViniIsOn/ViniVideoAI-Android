@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.2 — GPU e internet automáticos
+
+- O app verifica se o aparelho tem internet antes de enviar.
+- Se estiver offline, abre o painel de internet do Android; o sistema não permite ligar o Wi‑Fi silenciosamente.
+- O envio ao Kaggle solicita **Internet ON** e **GPU T4 ×2** automaticamente.
+- O kernel usa `machineShape = NvidiaTeslaT4`.
+- Erro 403 de `kernels.get` agora é tratado separadamente: a geração pode continuar mesmo quando a credencial não permite consultar o status.
+
+
+
 ## v0.7.1 — prompt ao vivo
 
 - Corrige geração usando rascunho antigo.

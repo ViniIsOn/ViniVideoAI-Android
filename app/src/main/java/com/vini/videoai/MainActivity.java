@@ -11,6 +11,9 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -18,6 +21,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -1192,6 +1196,24 @@ public class MainActivity extends Activity {
     }
 
     private void submitKaggleProjectDirect(Project p) {
+        if (!hasUsableInternet()) {
+            p.status = "SEM INTERNET";
+            p.progress = 0;
+            p.stage = "Conecte o aparelho à internet";
+            saveProject(p);
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Sem internet")
+                    .setMessage(
+                            "O Android não permite que o app ligue o Wi‑Fi sozinho. Posso abrir o painel de internet para você conectar.")
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton(
+                            "Abrir internet",
+                            (d, w) -> openInternetPanel())
+                    .show();
+            return;
+        }
+
         if (!hasKaggleCredentials()) {
             p.status = "PRECISA CONECTAR";
             p.progress = 0;
@@ -1269,6 +1291,7 @@ public class MainActivity extends Activity {
                 body.put("enableGpu", true);
                 body.put("enableTpu", false);
                 body.put("enableInternet", true);
+                body.put("machineShape", "NvidiaTeslaT4");
 
                 kaggleRequestRaw(
                         "POST",
@@ -1277,7 +1300,7 @@ public class MainActivity extends Activity {
 
                 p.status = "NA FILA";
                 p.progress = 8;
-                p.stage = "Kaggle recebeu o prompt • aguardando GPU";
+                p.stage = "Kaggle recebeu o prompt • Internet ON • GPU T4 solicitada";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -1341,11 +1364,59 @@ public class MainActivity extends Activity {
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             } catch (Exception e) {
-                p.connectionWarning = compact(e.getMessage());
+                String error = compact(e.getMessage());
+                if (error.contains("403")
+                        && error.toLowerCase(Locale.ROOT).contains("kernels.get")) {
+                    p.connectionWarning =
+                            "O Kaggle aceitou a geração, mas esta credencial não permite ler o status. "
+                                    + "A GPU pode continuar rodando; reconecte com uma credencial que permita visualizar kernels.";
+                    p.stage = "Execução enviada • status não pode ser consultado";
+                } else {
+                    p.connectionWarning = error;
+                }
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             }
         });
+    }
+
+    private boolean hasUsableInternet() {
+        try {
+            ConnectivityManager cm =
+                    (ConnectivityManager)
+                            getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+
+            Network network = cm.getActiveNetwork();
+            if (network == null) return false;
+
+            NetworkCapabilities caps =
+                    cm.getNetworkCapabilities(network);
+            return caps != null
+                    && caps.hasCapability(
+                            NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (Exception ignored) {
+            return true;
+        }
+    }
+
+    private void openInternetPanel() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                startActivity(new Intent(
+                        Settings.Panel.ACTION_INTERNET_CONNECTIVITY));
+            } else {
+                startActivity(new Intent(
+                        Settings.ACTION_WIFI_SETTINGS));
+            }
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(
+                        Settings.ACTION_WIRELESS_SETTINGS));
+            } catch (Exception ignored) {
+                toast("Abra o Wi‑Fi nas configurações do Android.");
+            }
+        }
     }
 
     private String extractKaggleStatus(String raw) {

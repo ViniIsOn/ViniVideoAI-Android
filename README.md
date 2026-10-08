@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.8.3 — executar o Kaggle de verdade
+
+- Envio real usa `kernelExecutionType = SAVE_AND_RUN_ALL`.
+- GPU usa `machineShape = NvidiaTeslaT4`.
+- Internet permanece ativada no kernel.
+- O teste de conexão usa `QUICK_SAVE`, sem rodar GPU.
+- Slug e título do kernel agora combinam, evitando notebooks aleatórios/drafts incoerentes.
+
+
+
 ## v0.8.1 — usar URL real devolvida pelo Kaggle
 
 - O app não monta mais a URL do notebook/resultado manualmente.

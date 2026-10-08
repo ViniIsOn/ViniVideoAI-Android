@@ -688,11 +688,24 @@ public class MainActivity extends Activity {
         ProgressBar progress = new ProgressBar(
                 this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.setProgress(Math.max(0, Math.min(100, p.progress)));
+        int initialProgress = "GERANDO".equalsIgnoreCase(p.status)
+                ? estimatedRunningProgress(p)
+                : p.progress;
+        progress.setProgress(Math.max(0, Math.min(100, initialProgress)));
         previewCard.addView(progress, margin(-1, dp(8), 0, 6));
-        previewCard.addView(small(
-                (p.stage == null || p.stage.isEmpty()) ? "Aguardando" : p.stage,
-                p.status.equalsIgnoreCase("ERRO") ? danger : muted));
+
+        TextView stageText = small(
+                "GERANDO".equalsIgnoreCase(p.status)
+                        ? estimatedRunningStage(p)
+                        : ((p.stage == null || p.stage.isEmpty())
+                                ? "Aguardando"
+                                : p.stage),
+                p.status.equalsIgnoreCase("ERRO") ? danger : muted);
+        previewCard.addView(stageText);
+
+        if ("GERANDO".equalsIgnoreCase(p.status)) {
+            startRunningUiTicker(p, progress, stageText);
+        }
 
         if (("ENVIADO".equalsIgnoreCase(p.status)
                 || "PREPARANDO".equalsIgnoreCase(p.status)
@@ -702,7 +715,8 @@ public class MainActivity extends Activity {
                 && !p.kaggleSlug.isEmpty()) {
             previewCard.addView(small(
                     "O estado vem do Kaggle. Enquanto ele só informa RUNNING, "
-                            + "a porcentagem é uma estimativa visual baseada no tempo decorrido — não um progresso exato do modelo.",
+                            + "o relógio e a estimativa avançam localmente a cada segundo. "
+                            + "A porcentagem é visual, não um progresso exato do modelo.",
                     green), margin(-1, -2, 8, 0));
         }
 
@@ -1637,6 +1651,28 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> showProject(p));
             }
         });
+    }
+
+    private void startRunningUiTicker(
+            Project p,
+            ProgressBar progress,
+            TextView stageText) {
+        final Runnable[] ticker = new Runnable[1];
+        ticker[0] = () -> {
+            if (!"GERANDO".equalsIgnoreCase(p.status)
+                    || isFinishing()
+                    || isDestroyed()) {
+                return;
+            }
+
+            int estimate = estimatedRunningProgress(p);
+            progress.setProgress(estimate);
+            stageText.setText(estimatedRunningStage(p));
+
+            handler.postDelayed(ticker[0], 1000);
+        };
+
+        handler.postDelayed(ticker[0], 1000);
     }
 
     private int estimatedRunningProgress(Project p) {

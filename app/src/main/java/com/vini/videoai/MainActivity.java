@@ -818,6 +818,89 @@ public class MainActivity extends Activity {
         brand("Backend", "Motor de geração real");
         navBar("BACKEND");
 
+        LinearLayout kaggleDirect = card();
+        root.addView(kaggleDirect, margin(-1, -2, 0, 12));
+        label(kaggleDirect, "KAGGLE DIRETO — RECOMENDADO", cyan, 12, true);
+        kaggleDirect.addView(small(
+                "Conecte sua conta uma vez. Depois, o botão Gerar envia o prompt e inicia a GPU do Kaggle sem copiar e colar.",
+                muted), margin(-1, -2, 0, 12));
+
+        sectionLabel(kaggleDirect, "USUÁRIO KAGGLE");
+        EditText kaggleUser = edit(
+                prefs.getString(KAGGLE_USERNAME, ""),
+                "Seu nome de usuário no Kaggle");
+        kaggleUser.setSingleLine(true);
+        kaggleDirect.addView(kaggleUser, margin(-1, dp(54), 0, 10));
+
+        sectionLabel(kaggleDirect, "LEGACY API KEY");
+        boolean hasSavedKaggleKey = !prefs.getString(KAGGLE_KEY_ENC, "").isEmpty();
+        EditText kaggleKey = edit(
+                "",
+                hasSavedKaggleKey
+                        ? "Chave salva com segurança — deixe vazio para manter"
+                        : "Cole a key do kaggle.json");
+        kaggleKey.setSingleLine(true);
+        kaggleKey.setInputType(
+                InputType.TYPE_CLASS_TEXT
+                        | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        kaggleDirect.addView(kaggleKey, margin(-1, dp(54), 0, 8));
+
+        kaggleDirect.addView(small(
+                "No Kaggle: Settings → API → Create Legacy API Key. O app guarda a key criptografada no Android Keystore.",
+                muted), margin(-1, -2, 0, 10));
+
+        Button connectKaggle = button(
+                hasKaggleCredentials()
+                        ? "✓ TESTAR / ATUALIZAR CONEXÃO"
+                        : "CONECTAR KAGGLE",
+                cyan, bg);
+        connectKaggle.setOnClickListener(v -> {
+            String username = kaggleUser.getText().toString().trim();
+            String enteredKey = kaggleKey.getText().toString().trim();
+
+            if (username.isEmpty()) {
+                toast("Digite seu usuário do Kaggle.");
+                return;
+            }
+
+            try {
+                if (!enteredKey.isEmpty()) {
+                    saveKaggleCredentials(username, enteredKey);
+                } else if (hasKaggleCredentials()) {
+                    prefs.edit().putString(KAGGLE_USERNAME, username).apply();
+                } else {
+                    toast("Cole sua Legacy API Key.");
+                    return;
+                }
+            } catch (Exception e) {
+                toast("Não consegui salvar a credencial.");
+                return;
+            }
+
+            toast("Testando Kaggle…");
+            testKaggleDirect();
+        });
+        kaggleDirect.addView(connectKaggle, margin(-1, dp(54), 0, 8));
+
+        if (hasKaggleCredentials()) {
+            kaggleDirect.addView(small(
+                    "Conta configurada: " + prefs.getString(KAGGLE_USERNAME, ""),
+                    green), margin(-1, -2, 0, 8));
+
+            Button disconnectKaggle = button(
+                    "Desconectar Kaggle",
+                    panelAlt, danger);
+            disconnectKaggle.setOnClickListener(v -> {
+                prefs.edit()
+                        .remove(KAGGLE_USERNAME)
+                        .remove(KAGGLE_KEY_ENC)
+                        .apply();
+                toast("Kaggle desconectado.");
+                showSettings();
+            });
+            kaggleDirect.addView(disconnectKaggle, margin(-1, dp(48), 0, 0));
+        }
+
         LinearLayout warning = card();
         root.addView(warning, margin(-1, -2, 0, 12));
         label(warning, "IMPORTANTE", gold, 12, true);

@@ -701,8 +701,8 @@ public class MainActivity extends Activity {
                 && p.kaggleSlug != null
                 && !p.kaggleSlug.isEmpty()) {
             previewCard.addView(small(
-                    "O app consulta o estado real do Kaggle automaticamente. "
-                            + "A barra representa o estado da sessão: preparando → fila → GPU rodando → concluído.",
+                    "O estado vem do Kaggle. Enquanto ele só informa RUNNING, "
+                            + "a porcentagem é uma estimativa visual baseada no tempo decorrido — não um progresso exato do modelo.",
                     green), margin(-1, -2, 8, 0));
         }
 
@@ -1419,6 +1419,7 @@ public class MainActivity extends Activity {
 
         p.status = "ENVIANDO";
         p.progress = 3;
+        p.kaggleRunningStartedAt = 0L;
         p.stage = "Enviando: " + truncate(p.prompt, 70);
         p.connectionWarning = "";
 
@@ -1598,8 +1599,11 @@ public class MainActivity extends Activity {
                             : "Kaggle: " + compact(failure);
                 } else if (normalized.contains("RUNNING")) {
                     p.status = "GERANDO";
-                    p.progress = 60;
-                    p.stage = "GPU T4 rodando no Kaggle";
+                    if (p.kaggleRunningStartedAt <= 0L) {
+                        p.kaggleRunningStartedAt = System.currentTimeMillis();
+                    }
+                    p.progress = estimatedRunningProgress(p);
+                    p.stage = estimatedRunningStage(p);
                     p.connectionWarning = "";
                 } else if (normalized.contains("QUEUED")) {
                     p.status = "NA FILA";
@@ -1633,6 +1637,66 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> showProject(p));
             }
         });
+    }
+
+    private int estimatedRunningProgress(Project p) {
+        long started = p.kaggleRunningStartedAt > 0L
+                ? p.kaggleRunningStartedAt
+                : System.currentTimeMillis();
+        long elapsedSeconds = Math.max(
+                0L,
+                (System.currentTimeMillis() - started) / 1000L);
+
+        int expectedSeconds;
+        if ("Cinema".equalsIgnoreCase(p.quality)) {
+            expectedSeconds = Math.max(420, p.durationSeconds * 55);
+        } else if ("Qualidade".equalsIgnoreCase(p.quality)) {
+            expectedSeconds = Math.max(300, p.durationSeconds * 40);
+        } else {
+            expectedSeconds = Math.max(180, p.durationSeconds * 26);
+        }
+
+        double ratio = Math.min(
+                0.96,
+                elapsedSeconds / (double) expectedSeconds);
+        int estimate = 35 + (int) Math.round(ratio * 60.0);
+        return Math.max(35, Math.min(95, estimate));
+    }
+
+    private String estimatedRunningStage(Project p) {
+        long started = p.kaggleRunningStartedAt > 0L
+                ? p.kaggleRunningStartedAt
+                : System.currentTimeMillis();
+        long elapsedSeconds = Math.max(
+                0L,
+                (System.currentTimeMillis() - started) / 1000L);
+
+        int minute = (int) (elapsedSeconds / 60L);
+        int second = (int) (elapsedSeconds % 60L);
+        String elapsed = String.format(
+                Locale.ROOT,
+                "%d:%02d",
+                minute,
+                second);
+
+        int progress = estimatedRunningProgress(p);
+        String phase;
+        if (progress < 48) {
+            phase = "Carregando modelo e preparando frames";
+        } else if (progress < 72) {
+            phase = "Gerando os frames do vídeo";
+        } else if (progress < 88) {
+            phase = "Montando movimento e continuidade";
+        } else {
+            phase = "Finalizando e codificando o MP4";
+        }
+
+        return phase
+                + " • "
+                + elapsed
+                + " decorrido • "
+                + progress
+                + "% estimado";
     }
 
     private boolean hasUsableInternet() {
@@ -2444,6 +2508,7 @@ public class MainActivity extends Activity {
         o.put("kaggle_slug", p.kaggleSlug);
         o.put("kaggle_output_page", p.kaggleOutputPage);
         o.put("kaggle_ref", p.kaggleRef);
+        o.put("kaggle_running_started_at", p.kaggleRunningStartedAt);
 
         JSONArray scenes = new JSONArray();
         for (Scene s : p.scenes) {
@@ -2485,6 +2550,8 @@ public class MainActivity extends Activity {
         p.kaggleSlug = o.optString("kaggle_slug", "");
         p.kaggleOutputPage = o.optString("kaggle_output_page", "");
         p.kaggleRef = o.optString("kaggle_ref", "");
+        p.kaggleRunningStartedAt =
+                o.optLong("kaggle_running_started_at", 0L);
 
         JSONArray scenes = o.optJSONArray("scenes");
         if (scenes != null) {
@@ -2922,6 +2989,7 @@ public class MainActivity extends Activity {
         String kaggleSlug = "";
         String kaggleOutputPage = "";
         String kaggleRef = "";
+        long kaggleRunningStartedAt = 0L;
         final List<Scene> scenes = new ArrayList<>();
     }
 }

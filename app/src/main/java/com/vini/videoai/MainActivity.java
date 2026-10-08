@@ -155,12 +155,12 @@ public class MainActivity extends Activity {
         root.addView(hero, margin(-1, -2, 0, 12));
         label(hero, "O QUE ACONTECE NO VÍDEO?", cyan, 12, true);
         hero.addView(small(
-                "Escreva a cena. O app cuida do estilo e das configurações recomendadas.",
+                "Escreva só a ação do episódio. O app transforma isso em um prompt completo automaticamente.",
                 muted), margin(-1, -2, 0, 10));
 
         promptInput = edit(
                 prefs.getString(DRAFT_PROMPT, ""),
-                "Ex.: Poder Azul olha para a câmera e percebe que está dentro de um vídeo...");
+                "Ex.: Poder Azul percebe a câmera e toma um susto...");
         promptInput.setMinLines(5);
         promptInput.setGravity(Gravity.TOP);
         hero.addView(promptInput, margin(-1, -2, 0, 10));
@@ -190,7 +190,7 @@ public class MainActivity extends Activity {
         quick.addView(durationSpinner, margin(-1, dp(52), 0, 10));
 
         quick.addView(small(
-                "Padrão recomendado: Poder Azul • Cartoon Filme Animado • Qualidade Rápida",
+                "Automático: personagem Poder Azul + Cartoon Filme Animado + consistência + Qualidade Rápida",
                 green));
 
         // Configurações avançadas ficam prontas, mas escondidas.
@@ -529,8 +529,7 @@ public class MainActivity extends Activity {
                     ? " Use o último frame da cena anterior como referência visual e preserve exatamente identidade, proporções, roupa, paleta, iluminação e cenário."
                     : "";
 
-            s.prompt = p.prompt
-                    + ". " + stylePrompt(p.style)
+            s.prompt = buildAutomaticKagglePrompt(p.prompt, p.style)
                     + ". Objetivo desta tomada: " + beat + ". "
                     + cameras[(index - 1) % cameras.length]
                     + ". Evite reiniciar cenário, trocar design do personagem ou inserir cortes aleatórios."
@@ -912,15 +911,49 @@ public class MainActivity extends Activity {
         return "stylized 3D animated feature-film look, clean appealing character shapes, expressive cartoon face, soft stylized materials, colorful production design, smooth coherent animation, avoid uncanny photorealism";
     }
 
+    private String buildAutomaticKagglePrompt(String userPrompt, String style) {
+        String idea = userPrompt == null ? "" : userPrompt.trim();
+        String lower = idea.toLowerCase(Locale.ROOT);
+
+        StringBuilder out = new StringBuilder();
+
+        if (lower.contains("poder azul")
+                || lower.contains("arara azul")
+                || lower.contains("blue macaw")) {
+            out.append(
+                    "Poder Azul is a cute charismatic blue macaw with large expressive eyes, "
+                            + "a distinctive clean beak, soft stylized blue feathers and consistent cartoon proportions. "
+                            + "A tiny friendly green creature sits on top of his head. "
+                            + "Keep both characters visually identical throughout the entire shot. "
+                            + "Their faces, eyes, beak, colors, body proportions and the green companion must not change. "
+            );
+        }
+
+        out.append("User requested action: ").append(idea).append(". ");
+        out.append(stylePrompt(style)).append(". ");
+        out.append(
+                "Follow the requested action closely. Keep the scene simple and readable for a short vertical video. "
+                        + "Use expressive cartoon acting, smooth coherent movement, stable anatomy, "
+                        + "clean cinematic framing and no random cuts. "
+                        + "The character may look directly at the camera when the action implies breaking the fourth wall."
+        );
+
+        return out.toString();
+    }
+
     private void copyKaggleConfigAndOpen(Project p) {
         try {
             String profile = "Cinema".equalsIgnoreCase(p.quality)
                     ? "MAXIMA"
                     : "RAPIDO_QUALIDADE";
 
+            String automaticPrompt = buildAutomaticKagglePrompt(
+                    p.prompt, p.style);
+
             String config =
-                    "# ViniVideo AI v0.6 — cole na célula CONFIGURAÇÃO\n"
-                    + "USER_PROMPT = " + JSONObject.quote(p.prompt) + "\n"
+                    "# ViniVideo AI v0.6.2 — prompt automático\n"
+                    + "# Você escreveu só a ação; o app expandiu o resto sozinho.\n"
+                    + "USER_PROMPT = " + JSONObject.quote(automaticPrompt) + "\n"
                     + "STYLE = " + JSONObject.quote(styleCode(p.style)) + "\n"
                     + "ASPECT = " + JSONObject.quote(p.aspect) + "\n"
                     + "DURATION_SECONDS = " + p.durationSeconds + "\n"
@@ -940,7 +973,7 @@ public class MainActivity extends Activity {
                     .putString(RETURN_PROJECT, p.id)
                     .apply();
 
-            toast("Configuração copiada. Cole na célula CONFIGURAÇÃO do Kaggle.");
+            toast("Prompt automático pronto ✓ Cole na célula CONFIGURAÇÃO.");
             openKaggleQuality();
         } catch (Exception e) {
             toast("Não consegui preparar a configuração do Kaggle.");

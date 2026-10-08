@@ -1434,10 +1434,14 @@ public class MainActivity extends Activity {
                 String automaticPrompt =
                         buildAutomaticKagglePrompt(
                                 p.prompt, p.style);
-                String profile =
-                        "Cinema".equalsIgnoreCase(p.quality)
-                                ? "MAXIMA"
-                                : "RAPIDO_QUALIDADE";
+                String profile;
+                if ("Cinema".equalsIgnoreCase(p.quality)) {
+                    profile = "MAXIMA";
+                } else if ("Qualidade".equalsIgnoreCase(p.quality)) {
+                    profile = "QUALIDADE";
+                } else {
+                    profile = "RAPIDO";
+                }
 
                 String script = readAssetText(
                         "kaggle_vinivideo_runner.py")
@@ -1468,9 +1472,14 @@ public class MainActivity extends Activity {
                 body.put("enableTpu", false);
                 body.put("enableInternet", true);
                 body.put("machineShape", "NvidiaTeslaT4");
-                int sessionTimeoutSeconds = Math.max(
-                        1800,
-                        Math.min(3600, p.durationSeconds * 180));
+                int sessionTimeoutSeconds;
+                if ("MAXIMA".equals(profile)) {
+                    sessionTimeoutSeconds = 2700;
+                } else if ("QUALIDADE".equals(profile)) {
+                    sessionTimeoutSeconds = 2100;
+                } else {
+                    sessionTimeoutSeconds = 1200;
+                }
                 body.put("sessionTimeoutSeconds", sessionTimeoutSeconds);
 
                 kaggleRequestRaw(
@@ -1480,7 +1489,7 @@ public class MainActivity extends Activity {
 
                 p.status = "ENVIADO";
                 p.progress = 15;
-                p.stage = "Enviado ao Kaggle • GPU T4 solicitada • a sessão encerra sozinha ao terminar ou no limite de segurança";
+                p.stage = "Enviado ao Kaggle • modo " + profile + " • GPU T4 solicitada • sessão com limite automático";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -2236,9 +2245,10 @@ public class MainActivity extends Activity {
                         && !p.kaggleSlug.isEmpty();
 
         String message = hasRemoteKaggle
-                ? "Este projeto também tem uma execução/kernel no Kaggle. "
-                        + "O app vai tentar remover primeiro o kernel remoto. "
-                        + "Só depois de o Kaggle confirmar a limpeza o projeto some do aparelho."
+                ? "O projeto será removido deste aparelho agora. "
+                        + "O app também vai tentar limpar a execução no Kaggle; "
+                        + "se o Kaggle negar a exclusão, o projeto local ainda será apagado "
+                        + "e a sessão remota ficará protegida pelo limite automático."
                 : "O projeto será removido do histórico deste aparelho.";
 
         new AlertDialog.Builder(this)
@@ -2246,16 +2256,8 @@ public class MainActivity extends Activity {
                 .setMessage(message)
                 .setNegativeButton("Cancelar", null)
                 .setPositiveButton("Excluir", (d, w) -> {
-                    if (hasRemoteKaggle && hasKaggleDirectAccess()) {
+                    if (hasRemoteKaggle && hasKaggleCredentials()) {
                         cleanupKaggleAndDeleteProject(p);
-                    } else if (hasRemoteKaggle) {
-                        new AlertDialog.Builder(this)
-                                .setTitle("Kaggle não passou no teste completo")
-                                .setMessage(
-                                        "Não vou apagar só o registro local enquanto existe um kernel associado. "
-                                                + "Abra Backend e rode o teste completo do Kaggle primeiro.")
-                                .setPositiveButton("OK", null)
-                                .show();
                     } else {
                         deleteProject(p.id);
                         showProjects();
@@ -2265,7 +2267,10 @@ public class MainActivity extends Activity {
     }
 
     private void cleanupKaggleAndDeleteProject(Project p) {
-        toast("Limpando execução do Kaggle…");
+        // O usuário sempre consegue apagar o projeto local.
+        deleteProject(p.id);
+        showProjects();
+        toast("Projeto removido deste aparelho.");
 
         executor.execute(() -> {
             try {
@@ -2278,20 +2283,17 @@ public class MainActivity extends Activity {
                         KAGGLE_DELETE_KERNEL,
                         deleteBody);
 
-                deleteProject(p.id);
-                runOnUiThread(() -> {
-                    toast("Projeto e kernel do Kaggle removidos ✓");
-                    showProjects();
-                });
+                runOnUiThread(() ->
+                        toast("Execução do Kaggle também foi limpa ✓"));
             } catch (Exception e) {
                 String error = compact(e.getMessage());
                 runOnUiThread(() -> new AlertDialog.Builder(this)
-                        .setTitle("Não consegui limpar o Kaggle")
+                        .setTitle("Projeto apagado do celular")
                         .setMessage(
-                                error
-                                        + "\n\nO projeto NÃO foi removido do aparelho. "
-                                        + "Assim você ainda mantém o controle dele. "
-                                        + "Se aparecer erro de permissão, a credencial precisa permitir kernels.delete.")
+                                "O Kaggle não autorizou a limpeza remota:\n"
+                                        + error
+                                        + "\n\nO projeto local já foi removido. "
+                                        + "A execução remota fica sujeita ao limite automático de sessão e encerra sozinha.")
                         .setPositiveButton("OK", null)
                         .show());
             }

@@ -105,6 +105,8 @@ public class MainActivity extends Activity {
             KAGGLE_API_BASE + "/kernels.KernelsApiService/SaveKernel";
     private static final String KAGGLE_DELETE_KERNEL =
             KAGGLE_API_BASE + "/kernels.KernelsApiService/DeleteKernel";
+    private static final String KAGGLE_STATUS_KERNEL =
+            KAGGLE_API_BASE + "/kernels.KernelsApiService/GetKernelSessionStatus";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -692,12 +694,15 @@ public class MainActivity extends Activity {
                 (p.stage == null || p.stage.isEmpty()) ? "Aguardando" : p.stage,
                 p.status.equalsIgnoreCase("ERRO") ? danger : muted));
 
-        if ("ENVIADO".equalsIgnoreCase(p.status)
+        if (("ENVIADO".equalsIgnoreCase(p.status)
+                || "PREPARANDO".equalsIgnoreCase(p.status)
+                || "NA FILA".equalsIgnoreCase(p.status)
+                || "GERANDO".equalsIgnoreCase(p.status))
                 && p.kaggleSlug != null
                 && !p.kaggleSlug.isEmpty()) {
             previewCard.addView(small(
-                    "✓ O Kaggle recebeu a execução. O app não fica consultando o status porque essa API pode devolver 403 indevidamente. "
-                            + "A GPU encerra automaticamente quando o script termina; o limite de sessão continua ativo.",
+                    "O app consulta o estado real do Kaggle automaticamente. "
+                            + "A barra representa o estado da sessão: preparando → fila → GPU rodando → concluído.",
                     green), margin(-1, -2, 8, 0));
         }
 
@@ -818,8 +823,13 @@ public class MainActivity extends Activity {
         if (!p.jobId.isEmpty() && !isTerminal(p.status)) {
             handler.postDelayed(() -> refreshProject(p), 4000);
         }
-        // Não consultamos kernels/status aqui: o Kaggle pode retornar
-        // kernels.get = 403 até para o dono. A execução continua no Kaggle.
+        if (p.kaggleSlug != null
+                && !p.kaggleSlug.isEmpty()
+                && !isTerminal(p.status)) {
+            handler.postDelayed(
+                    () -> refreshKaggleProject(p),
+                    7000);
+        }
     }
 
     private void showSceneDetail(Scene scene) {
@@ -1468,7 +1478,6 @@ public class MainActivity extends Activity {
                 body.put("isPrivate", true);
                 body.put("enableInternet", true);
                 body.put("machineShape", "NvidiaTeslaT4");
-                body.put("kernelExecutionType", "SAVE_AND_RUN_ALL");
                 int sessionTimeoutSeconds;
                 if ("MAXIMA".equals(profile)) {
                     sessionTimeoutSeconds = 2700;
@@ -1531,8 +1540,8 @@ public class MainActivity extends Activity {
                 p.status = "ENVIADO";
                 p.progress = 15;
                 p.stage = p.kaggleOutputPage.isEmpty()
-                        ? "Kaggle recebeu o kernel e iniciou SAVE_AND_RUN_ALL; URL não devolvida."
-                        : "Kaggle iniciou SAVE_AND_RUN_ALL • GPU T4 • modo " + profile;
+                        ? "Kaggle recebeu o kernel • aguardando estado real da execução"
+                        : "Kernel enviado • aguardando estado real do Kaggle";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -1558,54 +1567,68 @@ public class MainActivity extends Activity {
 
         executor.execute(() -> {
             try {
-                String endpoint =
-                        KAGGLE_API_BASE
-                                + "/kernels/status?userName="
-                                + Uri.encode(p.kaggleOwner)
-                                + "&kernelSlug="
-                                + Uri.encode(p.kaggleSlug);
+                JSONObject request = new JSONObject();
+                request.put("userName", p.kaggleOwner);
+                request.put("kernelSlug", p.kaggleSlug);
 
                 String raw = kaggleRequestRaw(
-                        "GET", endpoint, null);
-                String state = extractKaggleStatus(raw);
-                String normalized =
-                        state.toLowerCase(Locale.ROOT);
+                        "POST",
+                        KAGGLE_STATUS_KERNEL,
+                        request);
 
-                if (normalized.contains("complete")
-                        || normalized.contains("success")) {
+                JSONObject statusJson = new JSONObject(raw);
+                String state = statusJson.optString("status", "");
+                String failure = statusJson.optString(
+                        "failureMessage",
+                        statusJson.optString("failure_message", ""));
+
+                String normalized =
+                        state.toUpperCase(Locale.ROOT);
+
+                if (normalized.contains("COMPLETE")) {
                     p.status = "CONCLUÍDO";
                     p.progress = 100;
-                    p.stage = "Vídeo pronto • GPU do Kaggle liberada";
+                    p.stage = "Kaggle concluiu a execução • GPU liberada";
                     p.connectionWarning = "";
-                } else if (normalized.contains("error")
-                        || normalized.contains("fail")) {
+                } else if (normalized.contains("ERROR")) {
                     p.status = "ERRO";
                     p.progress = 0;
-                    p.stage = "A execução do Kaggle falhou";
-                } else if (normalized.contains("queue")
-                        || normalized.contains("pending")) {
-                    p.status = "NA FILA";
-                    p.progress = Math.max(p.progress, 10);
-                    p.stage = "Aguardando GPU do Kaggle";
-                } else {
+                    p.stage = failure.isEmpty()
+                            ? "A execução do Kaggle falhou"
+                            : "Kaggle: " + compact(failure);
+                } else if (normalized.contains("RUNNING")) {
                     p.status = "GERANDO";
-                    p.progress = Math.max(p.progress, 35);
-                    p.stage = "Kaggle está gerando o vídeo";
+                    p.progress = 60;
+                    p.stage = "GPU T4 rodando no Kaggle";
+                    p.connectionWarning = "";
+                } else if (normalized.contains("QUEUED")) {
+                    p.status = "NA FILA";
+                    p.progress = 25;
+                    p.stage = "Na fila do Kaggle • aguardando GPU T4";
+                    p.connectionWarning = "";
+                } else if (normalized.contains("CANCEL")) {
+                    p.status = "CANCELADO";
+                    p.progress = 0;
+                    p.stage = "Execução cancelada no Kaggle";
+                } else if (normalized.contains("NEW_SCRIPT")
+                        || normalized.isEmpty()) {
+                    p.status = "PREPARANDO";
+                    p.progress = 15;
+                    p.stage = "Kernel criado • Kaggle preparando a execução";
+                } else {
+                    p.status = state.isEmpty() ? "ENVIADO" : state;
+                    p.progress = Math.max(15, p.progress);
+                    p.stage = "Estado Kaggle: "
+                            + (state.isEmpty() ? "desconhecido" : state);
                 }
 
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             } catch (Exception e) {
                 String error = compact(e.getMessage());
-                if (error.contains("403")
-                        && error.toLowerCase(Locale.ROOT).contains("kernels.get")) {
-                    p.connectionWarning =
-                            "O Kaggle aceitou a geração, mas esta credencial não permite ler o status. "
-                                    + "A GPU pode continuar rodando; reconecte com uma credencial que permita visualizar kernels.";
-                    p.stage = "Execução enviada • status não pode ser consultado";
-                } else {
-                    p.connectionWarning = error;
-                }
+                p.connectionWarning = error;
+                p.stage =
+                        "Não consegui ler o estado real do Kaggle agora.";
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             }

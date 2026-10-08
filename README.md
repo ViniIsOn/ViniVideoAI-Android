@@ -1,5 +1,21 @@
 # ViniVideo AI
 
+## v0.8.4 — status real do Kaggle
+
+- Remove a barra congelada/falsa de 15%.
+- Usa a chamada RPC oficial `GetKernelSessionStatus` no host `api.kaggle.com`.
+- Estados reais viram progresso visual:
+  - PREPARANDO
+  - NA FILA
+  - GERANDO
+  - CONCLUÍDO / ERRO
+- O app volta a consultar o Kaggle a cada 7 segundos enquanto a execução estiver ativa.
+- O envio real deixa `kernelExecutionType` sem valor explícito, seguindo o comportamento oficial do Kaggle CLI para salvar e executar.
+- Mantém `machineShape = NvidiaTeslaT4`.
+- Botão de abrir execução só aparece quando há URL confiável.
+
+
+
 ## v0.8.3 — executar o Kaggle de verdade
 
 - Envio real usa `kernelExecutionType = SAVE_AND_RUN_ALL`.

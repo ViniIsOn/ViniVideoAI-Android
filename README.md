@@ -1,5 +1,19 @@
 # ViniVideo AI
 
+## v0.7.5 — verificar permissões antes de gerar
+
+- Kaggle Direto passa a usar **Personal API Token (Bearer)**.
+- O app introspecta o token antes de gerar e exige:
+  - `kernels.get:*`
+  - `kernels.update:*`
+  - `kernels.execute:*`
+  - `kernels.delete:*`
+- Se faltar qualquer escopo, a geração é bloqueada antes do envio.
+- O app mostra os escopos detectados e quais estão faltando.
+- Exclusão remota só é liberada quando `kernels.delete:*` foi verificado.
+
+
+
 ## v0.7.4 — limpeza segura do Kaggle
 
 - Cada execução direta recebe um **limite automático de sessão** entre 30 e 60 minutos.

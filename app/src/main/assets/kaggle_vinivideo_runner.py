@@ -31,6 +31,10 @@ DURATION_SECONDS = __DURATION_SECONDS__
 PROFILE = __PROFILE_JSON__
 SEED = __SEED__
 
+print("VINIVIDEO_USER_PROMPT=" + USER_PROMPT)
+print("VINIVIDEO_ASPECT=" + ASPECT)
+print("VINIVIDEO_DURATION=" + str(DURATION_SECONDS))
+
 NEGATIVE_PROMPT = """low quality, worst quality, blurry, flicker, jitter,
 warped face, deformed face, changing eyes, changing character design,
 duplicated body parts, extra limbs, extra wings, deformed beak, broken anatomy,

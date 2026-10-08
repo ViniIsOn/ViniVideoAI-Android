@@ -77,19 +77,29 @@ if PROFILE == "MAXIMA":
     NUM_FRAMES = 81
     VERTICAL_SIZE = (448, 800)
     HORIZONTAL_SIZE = (800, 448)
-else:
+    SCENE_SECONDS = 5
+elif PROFILE == "QUALIDADE":
     STEPS = 18
     NUM_FRAMES = 65
     VERTICAL_SIZE = (384, 672)
     HORIZONTAL_SIZE = (672, 384)
+    SCENE_SECONDS = 5
+else:
+    # Modo rápido de verdade para shorts: menos denoising, menos frames,
+    # resolução menor e até 10s por tomada para evitar duas gerações pesadas.
+    STEPS = 10
+    NUM_FRAMES = 41
+    VERTICAL_SIZE = (288, 512)
+    HORIZONTAL_SIZE = (512, 288)
+    SCENE_SECONDS = 10
 
-GUIDANCE = 4.5
+GUIDANCE = 4.0 if PROFILE == "RAPIDO" else 4.5
 width, height = VERTICAL_SIZE if ASPECT == "9:16" else HORIZONTAL_SIZE
 
 out_dir = Path("/kaggle/working/ViniVideoAI")
 out_dir.mkdir(parents=True, exist_ok=True)
 
-scene_seconds = 5
+scene_seconds = SCENE_SECONDS
 scene_count = max(1, math.ceil(int(DURATION_SECONDS) / scene_seconds))
 scene_paths = []
 
@@ -146,8 +156,8 @@ run([
     "-f", "concat", "-safe", "0",
     "-i", str(concat_file),
     "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "18",
+    "-preset", "ultrafast" if PROFILE == "RAPIDO" else "veryfast",
+    "-crf", "21" if PROFILE == "RAPIDO" else "18",
     "-pix_fmt", "yuv420p",
     str(raw_path),
 ])
@@ -163,8 +173,8 @@ run([
     "-i", str(raw_path),
     "-vf", vf,
     "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "18",
+    "-preset", "ultrafast" if PROFILE == "RAPIDO" else "veryfast",
+    "-crf", "21" if PROFILE == "RAPIDO" else "18",
     "-pix_fmt", "yuv420p",
     "-movflags", "+faststart",
     str(final_path),

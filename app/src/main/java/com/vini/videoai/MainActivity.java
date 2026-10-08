@@ -99,6 +99,7 @@ public class MainActivity extends Activity {
     private static final String KAGGLE_TOKEN_ENC = "kaggle_token_enc";
     private static final String KAGGLE_TOKEN_SCOPES = "kaggle_token_scopes";
     private static final String KAGGLE_SCOPES_OK = "kaggle_scopes_ok";
+    private static final String KAGGLE_CAPABILITIES = "kaggle_capabilities";
     private static final String KAGGLE_KEY_ALIAS = "vinivideo_kaggle_key";
     private static final String KAGGLE_API_BASE = "https://www.kaggle.com/api/v1";
     private static final String KAGGLE_INTROSPECT =
@@ -903,22 +904,21 @@ public class MainActivity extends Activity {
         kaggleDirect.addView(kaggleToken, margin(-1, dp(54), 0, 8));
 
         kaggleDirect.addView(small(
-                "Para o modo direto funcionar sem 403, o token precisa ter: "
-                        + "kernels.get:*  •  kernels.update:*  •  "
-                        + "kernels.execute:*  •  kernels.delete:*",
+                "O botão Generate New Token do Kaggle não mostra escopos para escolher. "
+                        + "Por isso o app agora testa as capacidades reais do token com um kernel privado de diagnóstico, sem GPU.",
                 muted), margin(-1, -2, 0, 8));
 
         boolean scopesOk = prefs.getBoolean(KAGGLE_SCOPES_OK, false);
-        String savedScopes = prefs.getString(KAGGLE_TOKEN_SCOPES, "");
+        String savedScopes = prefs.getString(KAGGLE_CAPABILITIES, "");
         if (hasSavedKaggleToken) {
             kaggleDirect.addView(small(
                     scopesOk
-                            ? "✓ Permissões verificadas para gerar, acompanhar e limpar kernels."
-                            : "⚠ Token salvo, mas as permissões ainda não foram verificadas.",
+                            ? "✓ Token testado: criar/executar, acompanhar e excluir kernel funcionam."
+                            : "⚠ Token salvo, mas as capacidades ainda não foram verificadas.",
                     scopesOk ? green : gold), margin(-1, -2, 0, 8));
             if (!savedScopes.isEmpty()) {
                 kaggleDirect.addView(small(
-                        "Escopos detectados: " + savedScopes,
+                        "Teste: " + savedScopes,
                         muted), margin(-1, -2, 0, 8));
             }
         }
@@ -939,8 +939,8 @@ public class MainActivity extends Activity {
 
         Button connectKaggle = button(
                 hasSavedKaggleToken
-                        ? "✓ VERIFICAR PERMISSÕES"
-                        : "CONECTAR E VERIFICAR",
+                        ? "✓ TESTAR TOKEN"
+                        : "CONECTAR E TESTAR",
                 cyan, bg);
         connectKaggle.setOnClickListener(v -> {
             String username = kaggleUser.getText().toString().trim();
@@ -983,6 +983,7 @@ public class MainActivity extends Activity {
                         .remove(KAGGLE_KEY_ENC)
                         .remove(KAGGLE_TOKEN_ENC)
                         .remove(KAGGLE_TOKEN_SCOPES)
+                        .remove(KAGGLE_CAPABILITIES)
                         .remove(KAGGLE_SCOPES_OK)
                         .apply();
                 toast("Kaggle desconectado.");
@@ -1152,6 +1153,7 @@ public class MainActivity extends Activity {
                 .putString(KAGGLE_TOKEN_ENC, encrypted)
                 .putBoolean(KAGGLE_SCOPES_OK, false)
                 .remove(KAGGLE_TOKEN_SCOPES)
+                .remove(KAGGLE_CAPABILITIES)
                 .apply();
     }
 
@@ -1225,97 +1227,163 @@ public class MainActivity extends Activity {
 
     private void testKaggleDirect() {
         executor.execute(() -> {
+            String username =
+                    prefs.getString(KAGGLE_USERNAME, "").trim();
+            String probeSlug =
+                    "vinivideo-capability-test-"
+                            + Long.toHexString(System.currentTimeMillis());
+
+            boolean pushed = false;
+            boolean statusRead = false;
+            boolean deleted = false;
+
             try {
-                String token = getKaggleToken();
-                JSONObject body = new JSONObject();
-                body.put("token", token);
-
-                String raw = publicJsonRequest(
-                        "POST",
-                        KAGGLE_INTROSPECT,
-                        body);
-                JSONObject info = new JSONObject(raw);
-
-                if (!info.optBoolean("active", false)) {
+                if (username.isEmpty()) {
                     throw new IllegalStateException(
-                            "O token está inválido, expirado ou revogado.");
+                            "Digite seu usuário do Kaggle antes do teste.");
                 }
 
-                String scopes = info.optString("scope", "").trim();
-                String usernameFromToken =
-                        info.optString("username", "").trim();
+                // 1) Valida que o token está ativo. Tokens pessoais normais podem
+                // retornar scope vazio; isso NÃO é tratado como erro.
+                try {
+                    String token = getKaggleToken();
+                    JSONObject introspectBody = new JSONObject();
+                    introspectBody.put("token", token);
+                    String raw = publicJsonRequest(
+                            "POST",
+                            KAGGLE_INTROSPECT,
+                            introspectBody);
+                    JSONObject info = new JSONObject(raw);
 
-                boolean ok = hasScope(scopes, "kernels.get")
-                        && hasScope(scopes, "kernels.update")
-                        && hasScope(scopes, "kernels.execute")
-                        && hasScope(scopes, "kernels.delete");
+                    if (!info.optBoolean("active", false)) {
+                        throw new IllegalStateException(
+                                "O token está inválido, expirado ou revogado.");
+                    }
 
-                SharedPreferences.Editor editor = prefs.edit()
-                        .putString(KAGGLE_TOKEN_SCOPES, scopes)
-                        .putBoolean(KAGGLE_SCOPES_OK, ok);
-                if (!usernameFromToken.isEmpty()) {
-                    editor.putString(
-                            KAGGLE_USERNAME,
-                            usernameFromToken);
+                    String usernameFromToken =
+                            info.optString("username", "").trim();
+                    if (!usernameFromToken.isEmpty()) {
+                        username = usernameFromToken;
+                        prefs.edit()
+                                .putString(
+                                        KAGGLE_USERNAME,
+                                        usernameFromToken)
+                                .apply();
+                    }
+                } catch (Exception introspectError) {
+                    // Alguns tokens pessoais não expõem dados completos no
+                    // introspect. O teste funcional abaixo continua sendo a
+                    // fonte de verdade.
                 }
-                editor.apply();
+
+                // 2) Cria e executa um kernel PRIVADO, sem GPU, só com print.
+                JSONObject body = new JSONObject();
+                body.put("slug", username + "/" + probeSlug);
+                body.put("newTitle", "ViniVideo AI capability test");
+                body.put(
+                        "text",
+                        "print('VINIVIDEO_KAGGLE_CAPABILITY_OK')\n");
+                body.put("language", "python");
+                body.put("kernelType", "script");
+                body.put("isPrivate", true);
+                body.put("enableGpu", false);
+                body.put("enableTpu", false);
+                body.put("enableInternet", false);
+                body.put("sessionTimeoutSeconds", 300);
+
+                kaggleRequestRaw(
+                        "POST",
+                        KAGGLE_API_BASE + "/kernels/push",
+                        body);
+                pushed = true;
+
+                // 3) Confirma que conseguimos ler o status.
+                String statusEndpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/status?userName="
+                                + Uri.encode(username)
+                                + "&kernelSlug="
+                                + Uri.encode(probeSlug);
+
+                kaggleRequestRaw(
+                        "GET",
+                        statusEndpoint,
+                        null);
+                statusRead = true;
+
+                // 4) Remove o kernel de diagnóstico.
+                String deleteEndpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/delete/"
+                                + Uri.encode(username)
+                                + "/"
+                                + Uri.encode(probeSlug);
+
+                kaggleRequestRaw(
+                        "POST",
+                        deleteEndpoint,
+                        null);
+                deleted = true;
+
+                prefs.edit()
+                        .putBoolean(KAGGLE_SCOPES_OK, true)
+                        .putString(
+                                KAGGLE_CAPABILITIES,
+                                "criar/executar ✓ • status ✓ • excluir ✓")
+                        .apply();
 
                 runOnUiThread(() -> {
-                    if (ok) {
-                        toast("Kaggle pronto ✓");
-                        showSettings();
-                    } else {
-                        new AlertDialog.Builder(this)
-                                .setTitle("Faltam permissões")
-                                .setMessage(
-                                        missingKaggleScopes(scopes)
-                                                + "\n\nCrie/edite um token com os quatro escopos antes de gerar.")
-                                .setPositiveButton("OK", null)
-                                .show();
-                    }
+                    toast("Kaggle pronto ✓");
+                    showSettings();
                 });
             } catch (Exception e) {
+                StringBuilder result = new StringBuilder();
+                result.append(pushed
+                        ? "criar/executar ✓"
+                        : "criar/executar ✗");
+                result.append(statusRead
+                        ? " • status ✓"
+                        : " • status ✗");
+                result.append(deleted
+                        ? " • excluir ✓"
+                        : " • excluir ✗");
+
                 prefs.edit()
                         .putBoolean(KAGGLE_SCOPES_OK, false)
+                        .putString(
+                                KAGGLE_CAPABILITIES,
+                                result.toString())
                         .apply();
+
+                // Se conseguimos criar mas falhou depois, tenta limpeza final.
+                if (pushed && !deleted) {
+                    try {
+                        String deleteEndpoint =
+                                KAGGLE_API_BASE
+                                        + "/kernels/delete/"
+                                        + Uri.encode(username)
+                                        + "/"
+                                        + Uri.encode(probeSlug);
+                        kaggleRequestRaw(
+                                "POST",
+                                deleteEndpoint,
+                                null);
+                    } catch (Exception ignored) {}
+                }
+
+                String error = compact(e.getMessage());
                 runOnUiThread(() -> new AlertDialog.Builder(this)
-                        .setTitle("Token Kaggle não aprovado")
-                        .setMessage(compact(e.getMessage()))
+                        .setTitle("Token Kaggle incompleto")
+                        .setMessage(
+                                "Teste real: "
+                                        + result
+                                        + "\n\n"
+                                        + error
+                                        + "\n\nNão foi usada GPU neste teste.")
                         .setPositiveButton("OK", null)
                         .show());
             }
         });
-    }
-
-    private boolean hasScope(String scopes, String permission) {
-        if (scopes == null || scopes.trim().isEmpty()) return false;
-        String[] parts = scopes.trim().split("\\s+");
-        for (String part : parts) {
-            if (part.equals(permission + ":*")
-                    || part.startsWith(permission + ":")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String missingKaggleScopes(String scopes) {
-        List<String> missing = new ArrayList<>();
-        if (!hasScope(scopes, "kernels.get")) {
-            missing.add("kernels.get:*");
-        }
-        if (!hasScope(scopes, "kernels.update")) {
-            missing.add("kernels.update:*");
-        }
-        if (!hasScope(scopes, "kernels.execute")) {
-            missing.add("kernels.execute:*");
-        }
-        if (!hasScope(scopes, "kernels.delete")) {
-            missing.add("kernels.delete:*");
-        }
-        return missing.isEmpty()
-                ? "Permissões completas."
-                : "Faltando: " + android.text.TextUtils.join(", ", missing);
     }
 
     private void submitKaggleProjectDirect(Project p) {
@@ -1338,16 +1406,16 @@ public class MainActivity extends Activity {
         }
 
         if (!hasKaggleRequiredScopes()) {
-            p.status = "PERMISSÕES";
+            p.status = "KAGGLE";
             p.progress = 0;
-            p.stage = "Verifique as permissões do Kaggle antes de gerar";
+            p.stage = "Teste a conexão do Kaggle antes de gerar";
             saveProject(p);
 
             new AlertDialog.Builder(this)
-                    .setTitle("Kaggle precisa de permissões")
+                    .setTitle("Teste o Kaggle primeiro")
                     .setMessage(
-                            "Antes de gerar, o app precisa confirmar os escopos de leitura, edição, execução e exclusão de kernels. "
-                                    + "Isso evita o erro 403 no meio do processo.")
+                            "Antes de gerar, o app precisa fazer um teste real de criar/executar, consultar status e excluir um kernel privado sem GPU. "
+                                    + "Isso evita descobrir um 403 no meio da geração.")
                     .setNegativeButton("Agora não", null)
                     .setPositiveButton(
                             "Verificar",
@@ -2279,7 +2347,7 @@ public class MainActivity extends Activity {
                                 error
                                         + "\n\nO projeto NÃO foi removido do aparelho. "
                                         + "Assim você ainda mantém o controle dele. "
-                                        + "Se aparecer erro de permissão, a credencial precisa permitir kernels.delete.")
+                                        + "Se aparecer erro de permissão, rode novamente o teste do token em Backend.")
                         .setPositiveButton("OK", null)
                         .show());
             }

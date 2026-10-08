@@ -309,9 +309,19 @@ public class MainActivity extends Activity {
             if (styleSpinner.getSelectedItem() == null) {
                 styleSpinner.setSelection(0);
             }
+
+            String livePrompt = promptInput == null
+                    ? ""
+                    : promptInput.getText().toString().trim();
+            if (livePrompt.length() < 4) {
+                toast("Escreva o que acontece no vídeo primeiro.");
+                return;
+            }
+
             saveDraftNow();
 
             Project p = projectFromDraft();
+            p.prompt = livePrompt;
             p.status = "PREPARANDO";
             p.progress = 1;
             p.stage = "Preparando envio direto ao Kaggle";
@@ -478,7 +488,13 @@ public class MainActivity extends Activity {
     }
 
     private Project projectFromDraft() {
-        String prompt = prefs.getString(DRAFT_PROMPT, "").trim();
+        String prompt = "";
+        if (promptInput != null) {
+            prompt = promptInput.getText().toString().trim();
+        }
+        if (prompt.isEmpty()) {
+            prompt = prefs.getString(DRAFT_PROMPT, "").trim();
+        }
         if (prompt.length() < 4) prompt = "Vídeo sem descrição";
 
         Project p = new Project();
@@ -1196,7 +1212,7 @@ public class MainActivity extends Activity {
 
         p.status = "ENVIANDO";
         p.progress = 3;
-        p.stage = "Enviando prompt direto ao Kaggle";
+        p.stage = "Enviando: " + truncate(p.prompt, 70);
         p.connectionWarning = "";
 
         String username =

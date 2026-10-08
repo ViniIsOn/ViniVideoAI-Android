@@ -1041,6 +1041,395 @@ public class MainActivity extends Activity {
         return out.toString();
     }
 
+    private boolean hasKaggleCredentials() {
+        return !prefs.getString(KAGGLE_USERNAME, "").trim().isEmpty()
+                && !prefs.getString(KAGGLE_KEY_ENC, "").trim().isEmpty();
+    }
+
+    private void saveKaggleCredentials(
+            String username,
+            String apiKey) throws Exception {
+        if (username == null || username.trim().isEmpty()) {
+            throw new IllegalArgumentException("Usuário Kaggle vazio");
+        }
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            throw new IllegalArgumentException("API key vazia");
+        }
+
+        String encrypted = encryptSecret(apiKey.trim());
+        prefs.edit()
+                .putString(KAGGLE_USERNAME, username.trim())
+                .putString(KAGGLE_KEY_ENC, encrypted)
+                .apply();
+    }
+
+    private String getKaggleApiKey() throws Exception {
+        String encrypted = prefs.getString(KAGGLE_KEY_ENC, "");
+        if (encrypted.isEmpty()) return "";
+        return decryptSecret(encrypted);
+    }
+
+    private SecretKey getOrCreateSecretKey() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+        keyStore.load(null);
+
+        if (keyStore.containsAlias(KAGGLE_KEY_ALIAS)) {
+            return ((KeyStore.SecretKeyEntry)
+                    keyStore.getEntry(KAGGLE_KEY_ALIAS, null))
+                    .getSecretKey();
+        }
+
+        KeyGenerator generator = KeyGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_AES,
+                "AndroidKeyStore");
+        generator.init(new KeyGenParameterSpec.Builder(
+                KAGGLE_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT
+                        | KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(
+                        KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build());
+        return generator.generateKey();
+    }
+
+    private String encryptSecret(String value) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey());
+
+        byte[] iv = cipher.getIV();
+        byte[] encrypted = cipher.doFinal(
+                value.getBytes(StandardCharsets.UTF_8));
+
+        byte[] joined = new byte[iv.length + encrypted.length];
+        System.arraycopy(iv, 0, joined, 0, iv.length);
+        System.arraycopy(
+                encrypted, 0, joined, iv.length, encrypted.length);
+
+        return Base64.encodeToString(joined, Base64.NO_WRAP);
+    }
+
+    private String decryptSecret(String encoded) throws Exception {
+        byte[] joined = Base64.decode(encoded, Base64.NO_WRAP);
+        if (joined.length < 13) {
+            throw new IllegalStateException("Credencial inválida");
+        }
+
+        byte[] iv = new byte[12];
+        byte[] encrypted = new byte[joined.length - 12];
+        System.arraycopy(joined, 0, iv, 0, 12);
+        System.arraycopy(joined, 12, encrypted, 0, encrypted.length);
+
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+                Cipher.DECRYPT_MODE,
+                getOrCreateSecretKey(),
+                new GCMParameterSpec(128, iv));
+
+        return new String(
+                cipher.doFinal(encrypted),
+                StandardCharsets.UTF_8);
+    }
+
+    private void testKaggleDirect() {
+        executor.execute(() -> {
+            try {
+                String endpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/list?group=profile&page=1&pageSize=1";
+                kaggleRequestRaw("GET", endpoint, null);
+                runOnUiThread(() -> {
+                    toast("Kaggle conectado ✓");
+                    showSettings();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> new AlertDialog.Builder(this)
+                        .setTitle("Não conectou ao Kaggle")
+                        .setMessage(
+                                compact(e.getMessage())
+                                        + "\n\nConfira o usuário e a Legacy API Key.")
+                        .setPositiveButton("OK", null)
+                        .show());
+            }
+        });
+    }
+
+    private void submitKaggleProjectDirect(Project p) {
+        if (!hasKaggleCredentials()) {
+            p.status = "PRECISA CONECTAR";
+            p.progress = 0;
+            p.stage = "Conecte sua conta Kaggle uma vez";
+            saveProject(p);
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Conectar Kaggle")
+                    .setMessage(
+                            "Para enviar o prompt direto sem copiar e colar, conecte sua conta Kaggle uma vez.")
+                    .setNegativeButton("Agora não", null)
+                    .setPositiveButton(
+                            "Conectar",
+                            (d, w) -> showSettings())
+                    .show();
+            return;
+        }
+
+        p.status = "ENVIANDO";
+        p.progress = 3;
+        p.stage = "Enviando prompt direto ao Kaggle";
+        p.connectionWarning = "";
+
+        String username =
+                prefs.getString(KAGGLE_USERNAME, "").trim();
+        String slug =
+                "vinivideo-"
+                        + p.id.substring(0, Math.min(8, p.id.length()))
+                        .toLowerCase(Locale.ROOT);
+
+        p.kaggleOwner = username;
+        p.kaggleSlug = slug;
+        p.kaggleOutputPage =
+                "https://www.kaggle.com/code/"
+                        + username + "/" + slug + "/output";
+
+        saveProject(p);
+        showProject(p);
+
+        executor.execute(() -> {
+            try {
+                String automaticPrompt =
+                        buildAutomaticKagglePrompt(
+                                p.prompt, p.style);
+                String profile =
+                        "Cinema".equalsIgnoreCase(p.quality)
+                                ? "MAXIMA"
+                                : "RAPIDO_QUALIDADE";
+
+                String script = readAssetText(
+                        "kaggle_vinivideo_runner.py")
+                        .replace(
+                                "__USER_PROMPT_JSON__",
+                                JSONObject.quote(automaticPrompt))
+                        .replace(
+                                "__ASPECT_JSON__",
+                                JSONObject.quote(p.aspect))
+                        .replace(
+                                "__DURATION_SECONDS__",
+                                String.valueOf(p.durationSeconds))
+                        .replace(
+                                "__PROFILE_JSON__",
+                                JSONObject.quote(profile))
+                        .replace(
+                                "__SEED__",
+                                String.valueOf(p.seed));
+
+                JSONObject body = new JSONObject();
+                body.put("slug", username + "/" + slug);
+                body.put("newTitle", "ViniVideo AI " + slug);
+                body.put("text", script);
+                body.put("language", "python");
+                body.put("kernelType", "script");
+                body.put("isPrivate", true);
+                body.put("enableGpu", true);
+                body.put("enableTpu", false);
+                body.put("enableInternet", true);
+
+                kaggleRequestRaw(
+                        "POST",
+                        KAGGLE_API_BASE + "/kernels/push",
+                        body);
+
+                p.status = "NA FILA";
+                p.progress = 8;
+                p.stage = "Kaggle recebeu o prompt • aguardando GPU";
+                saveProject(p);
+
+                runOnUiThread(() -> showProject(p));
+            } catch (Exception e) {
+                p.status = "ERRO";
+                p.progress = 0;
+                p.stage = compact(e.getMessage());
+                saveProject(p);
+
+                runOnUiThread(() -> showProject(p));
+            }
+        });
+    }
+
+    private void refreshKaggleProject(Project p) {
+        if (p.kaggleOwner == null
+                || p.kaggleOwner.isEmpty()
+                || p.kaggleSlug == null
+                || p.kaggleSlug.isEmpty()
+                || !hasKaggleCredentials()) {
+            return;
+        }
+
+        executor.execute(() -> {
+            try {
+                String endpoint =
+                        KAGGLE_API_BASE
+                                + "/kernels/status?userName="
+                                + Uri.encode(p.kaggleOwner)
+                                + "&kernelSlug="
+                                + Uri.encode(p.kaggleSlug);
+
+                String raw = kaggleRequestRaw(
+                        "GET", endpoint, null);
+                String state = extractKaggleStatus(raw);
+                String normalized =
+                        state.toLowerCase(Locale.ROOT);
+
+                if (normalized.contains("complete")
+                        || normalized.contains("success")) {
+                    p.status = "CONCLUÍDO";
+                    p.progress = 100;
+                    p.stage = "Vídeo pronto no Kaggle";
+                    p.connectionWarning = "";
+                } else if (normalized.contains("error")
+                        || normalized.contains("fail")) {
+                    p.status = "ERRO";
+                    p.progress = 0;
+                    p.stage = "A execução do Kaggle falhou";
+                } else if (normalized.contains("queue")
+                        || normalized.contains("pending")) {
+                    p.status = "NA FILA";
+                    p.progress = Math.max(p.progress, 10);
+                    p.stage = "Aguardando GPU do Kaggle";
+                } else {
+                    p.status = "GERANDO";
+                    p.progress = Math.max(p.progress, 35);
+                    p.stage = "Kaggle está gerando o vídeo";
+                }
+
+                saveProject(p);
+                runOnUiThread(() -> showProject(p));
+            } catch (Exception e) {
+                p.connectionWarning = compact(e.getMessage());
+                saveProject(p);
+                runOnUiThread(() -> showProject(p));
+            }
+        });
+    }
+
+    private String extractKaggleStatus(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return "running";
+        }
+
+        try {
+            JSONObject o = new JSONObject(raw);
+            String[] keys = {
+                    "status",
+                    "state",
+                    "workerStatus",
+                    "kernelWorkerStatus"
+            };
+            for (String key : keys) {
+                String value = o.optString(key, "");
+                if (!value.isEmpty()) return value;
+            }
+
+            String text = o.toString();
+            String upper = text.toUpperCase(Locale.ROOT);
+            if (upper.contains("COMPLETE")) return "complete";
+            if (upper.contains("ERROR")) return "error";
+            if (upper.contains("QUEUE")) return "queued";
+            if (upper.contains("RUN")) return "running";
+        } catch (Exception ignored) {
+            String upper = raw.toUpperCase(Locale.ROOT);
+            if (upper.contains("COMPLETE")) return "complete";
+            if (upper.contains("ERROR")) return "error";
+            if (upper.contains("QUEUE")) return "queued";
+        }
+        return "running";
+    }
+
+    private String kaggleRequestRaw(
+            String method,
+            String endpoint,
+            JSONObject body) throws Exception {
+        String username =
+                prefs.getString(KAGGLE_USERNAME, "").trim();
+        String apiKey = getKaggleApiKey();
+
+        if (username.isEmpty() || apiKey.isEmpty()) {
+            throw new IllegalStateException(
+                    "Conta Kaggle não conectada");
+        }
+
+        HttpURLConnection connection =
+                (HttpURLConnection)
+                        new URL(endpoint).openConnection();
+        connection.setRequestMethod(method);
+        connection.setConnectTimeout(20000);
+        connection.setReadTimeout(120000);
+        connection.setRequestProperty(
+                "Accept", "application/json");
+
+        String credentials = username + ":" + apiKey;
+        String basic = Base64.encodeToString(
+                credentials.getBytes(StandardCharsets.UTF_8),
+                Base64.NO_WRAP);
+        connection.setRequestProperty(
+                "Authorization", "Basic " + basic);
+
+        if (body != null) {
+            connection.setDoOutput(true);
+            connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=utf-8");
+            try (OutputStream os =
+                         connection.getOutputStream()) {
+                os.write(
+                        body.toString()
+                                .getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        int code = connection.getResponseCode();
+        InputStream stream =
+                code >= 200 && code < 300
+                        ? connection.getInputStream()
+                        : connection.getErrorStream();
+
+        String response = readAll(stream);
+
+        if (code < 200 || code >= 300) {
+            String detail = response;
+            try {
+                JSONObject error = new JSONObject(response);
+                detail = error.optString(
+                        "message",
+                        error.optString("detail", response));
+            } catch (Exception ignored) {}
+
+            throw new IllegalStateException(
+                    "Kaggle HTTP "
+                            + code
+                            + (detail == null || detail.isEmpty()
+                            ? ""
+                            : ": " + detail));
+        }
+
+        return response == null ? "" : response;
+    }
+
+    private String readAssetText(String name) throws Exception {
+        try (InputStream in = getAssets().open(name);
+             BufferedReader reader =
+                     new BufferedReader(
+                             new InputStreamReader(
+                                     in,
+                                     StandardCharsets.UTF_8))) {
+            StringBuilder out = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                out.append(line).append('\n');
+            }
+            return out.toString();
+        }
+    }
+
     private void copyKaggleConfigAndOpen(Project p) {
         try {
             String profile = "Cinema".equalsIgnoreCase(p.quality)

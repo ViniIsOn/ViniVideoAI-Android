@@ -1503,27 +1503,37 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                if (!returnedUrl.isEmpty()) {
-                    if (returnedUrl.startsWith("http://")
-                            || returnedUrl.startsWith("https://")) {
-                        p.kaggleOutputPage = returnedUrl;
-                    } else if (returnedUrl.startsWith("/")) {
-                        p.kaggleOutputPage =
-                                "https://www.kaggle.com" + returnedUrl;
-                    } else {
-                        p.kaggleOutputPage =
-                                "https://www.kaggle.com/" + returnedUrl;
-                    }
-                } else if (!returnedRef.isEmpty()) {
+                String normalizedReturnedUrl = returnedUrl;
+                if (!normalizedReturnedUrl.isEmpty()
+                        && normalizedReturnedUrl.startsWith("/")) {
+                    normalizedReturnedUrl =
+                            "https://www.kaggle.com"
+                                    + normalizedReturnedUrl;
+                }
+
+                boolean returnedUrlLooksLikeNotebook =
+                        normalizedReturnedUrl.contains("kaggle.com/code/");
+
+                if (!returnedRef.isEmpty()) {
+                    // O ref é o identificador mais confiável do notebook criado.
                     p.kaggleOutputPage =
-                            "https://www.kaggle.com/code/" + returnedRef;
+                            "https://www.kaggle.com/code/"
+                                    + returnedRef
+                                    + "/edit";
+                } else if (returnedUrlLooksLikeNotebook) {
+                    p.kaggleOutputPage =
+                            normalizedReturnedUrl.endsWith("/edit")
+                                    ? normalizedReturnedUrl
+                                    : normalizedReturnedUrl + "/edit";
+                } else {
+                    p.kaggleOutputPage = "";
                 }
 
                 p.status = "ENVIADO";
                 p.progress = 15;
                 p.stage = p.kaggleOutputPage.isEmpty()
-                        ? "Kaggle aceitou a execução, mas não devolveu uma URL de acompanhamento."
-                        : "Enviado ao Kaggle • modo " + profile + " • GPU T4 solicitada • sessão com limite automático";
+                        ? "Kaggle aceitou a execução, mas não devolveu ref/URL do notebook."
+                        : "Enviado ao Kaggle • notebook confirmado • modo " + profile + " • GPU T4 solicitada";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));

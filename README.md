@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.7.7 — não depender de kernels.get
+
+- Remove a dependência do endpoint de status do Kaggle que pode retornar `kernels.get = 403` indevidamente.
+- O teste de conexão usa apenas: criar kernel privado sem GPU → apagar kernel.
+- Após enviar a geração, o app mostra **ENVIADO** e não fica fazendo polling de status.
+- O botão de execução/resultado do Kaggle fica disponível logo após o envio.
+- Timeout automático de sessão e limpeza ao excluir projeto continuam ativos.
+
+
+
 ## v0.7.6 — teste real do Kaggle antes da GPU
 
 - Remove a checagem incorreta de escopos do Personal API Token.

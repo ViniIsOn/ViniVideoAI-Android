@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.6.2 — Prompt automático
+
+- Na tela Criar, o usuário escreve **só a ação do episódio**.
+- O app detecta prompts do **Poder Azul / arara azul** e adiciona automaticamente a descrição fixa do personagem e do bichinho verde.
+- O app acrescenta estilo cartoon, consistência, movimento suave, enquadramento e regras contra mudanças de personagem.
+- O bloco copiado para o Kaggle já contém o **prompt expandido automaticamente**.
+- O mesmo prompt automático também é usado nas tomadas internas do projeto.
+
+
+
 ## v0.6.1 — Interface simplificada
 
 - Tela **Criar** reduzida ao essencial: prompt, formato, duração e botão **Gerar vídeo**.

@@ -1,5 +1,19 @@
 # ViniVideo AI
 
+## v0.9.0 — volta ao Kaggle manual estável
+
+- Remove o Kaggle Direto como fluxo principal.
+- O botão **Gerar vídeo** volta a:
+  1. preparar automaticamente o prompt/configuração;
+  2. copiar a configuração;
+  3. abrir o notebook Kaggle;
+  4. deixar o usuário usar **Run All**.
+- Sem Personal API Token, sem API de kernels, sem polling remoto e sem sessões GPU criadas pelo app.
+- Mantém projetos, estilos, prompt automático e importação do MP4 para o projeto.
+- Backend próprio/Colab continua disponível em Avançado/Backend.
+
+
+
 ## v0.8.8 — limite de 2 sessões GPU
 
 - Detecta explicitamente `Maximum batch GPU Session count of 2 reached`.

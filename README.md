@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.8.8 — limite de 2 sessões GPU
+
+- Detecta explicitamente `Maximum batch GPU Session count of 2 reached`.
+- Mostra **LIMITE GPU** em vez de erro genérico.
+- Não continua fazendo polling nem criando novas tentativas quando o limite é atingido.
+- O modo Rápido passa a usar timeout máximo de 12 minutos para liberar vaga mais cedo.
+- A mensagem deixa claro que essa tentativa não consumiu uma terceira GPU.
+
+
+
 ## v0.8.7 — início de execução robusto no Kaggle
 
 - Cada geração cria um **kernel novo e único**, evitando reaproveitar drafts antigos.

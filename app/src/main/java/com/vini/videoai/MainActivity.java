@@ -707,6 +707,14 @@ public class MainActivity extends Activity {
             startRunningUiTicker(p, progress, stageText);
         }
 
+        if ("LIMITE GPU".equalsIgnoreCase(p.status)) {
+            previewCard.addView(small(
+                    "O Kaggle permite no máximo 2 sessões GPU batch simultâneas nesta conta. "
+                            + "Esta tentativa NÃO iniciou GPU nova. "
+                            + "Quando uma vaga liberar, toque em Gerar novamente.",
+                    gold), margin(-1, -2, 8, 0));
+        }
+
         if (("ENVIADO".equalsIgnoreCase(p.status)
                 || "PREPARANDO".equalsIgnoreCase(p.status)
                 || "NA FILA".equalsIgnoreCase(p.status)
@@ -1502,7 +1510,7 @@ public class MainActivity extends Activity {
                 } else if ("QUALIDADE".equals(profile)) {
                     sessionTimeoutSeconds = 2100;
                 } else {
-                    sessionTimeoutSeconds = 1200;
+                    sessionTimeoutSeconds = 720;
                 }
                 body.put("sessionTimeoutSeconds", sessionTimeoutSeconds);
 
@@ -1582,9 +1590,21 @@ public class MainActivity extends Activity {
 
                 runOnUiThread(() -> showProject(p));
             } catch (Exception e) {
-                p.status = "ERRO";
-                p.progress = 0;
-                p.stage = compact(e.getMessage());
+                String error = compact(e.getMessage());
+                String lower = error.toLowerCase(Locale.ROOT);
+
+                if (lower.contains("maximum batch gpu session count")
+                        || lower.contains("session count of 2 reached")) {
+                    p.status = "LIMITE GPU";
+                    p.progress = 0;
+                    p.stage =
+                            "O Kaggle já está usando as 2 vagas de GPU batch da sua conta. "
+                                    + "Espere uma sessão terminar ou encerre uma sessão antiga antes de gerar de novo.";
+                } else {
+                    p.status = "ERRO";
+                    p.progress = 0;
+                    p.stage = error;
+                }
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -2957,7 +2977,8 @@ public class MainActivity extends Activity {
                 || s.contains("CONCLU")
                 || s.contains("FAIL")
                 || s.contains("ERRO")
-                || s.contains("CANCEL");
+                || s.contains("CANCEL")
+                || s.contains("LIMITE GPU");
     }
 
     private int statusColor(String status) {
@@ -2965,6 +2986,7 @@ public class MainActivity extends Activity {
         String s = status.toUpperCase(Locale.ROOT);
         if (s.contains("DONE") || s.contains("COMPLET") || s.contains("CONCLU")) return green;
         if (s.contains("ERRO") || s.contains("FAIL")) return danger;
+        if (s.contains("LIMITE GPU")) return gold;
         if (s.contains("RUN") || s.contains("RENDER") || s.contains("ENVI")) return cyan;
         if (s.contains("QUEUE") || s.contains("FILA") || s.contains("PREPAR")) return gold;
         return muted;

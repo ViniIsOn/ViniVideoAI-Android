@@ -318,7 +318,6 @@ public class MainActivity extends Activity {
 
         Button generate = button("🎬 GERAR VÍDEO", cyan, bg);
         generate.setOnClickListener(v -> {
-            // Defaults simples, sem obrigar o usuário a decidir tudo.
             if (styleSpinner.getSelectedItem() == null) {
                 styleSpinner.setSelection(0);
             }
@@ -335,16 +334,21 @@ public class MainActivity extends Activity {
 
             Project p = projectFromDraft();
             p.prompt = livePrompt;
-            p.status = "PREPARANDO";
-            p.progress = 1;
-            p.stage = "Preparando envio direto ao Kaggle";
+            p.status = "KAGGLE MANUAL";
+            p.progress = 0;
+            p.stage = "Configuração pronta • abra o Kaggle e use Run All";
+            p.kaggleOwner = "";
+            p.kaggleSlug = "";
+            p.kaggleRef = "";
+            p.kaggleOutputPage = "";
+            p.connectionWarning = "";
             saveProject(p);
-            submitKaggleProjectDirect(p);
+            copyKaggleConfigAndOpen(p);
         });
         root.addView(generate, margin(-1, dp(62), 0, 10));
 
         root.addView(small(
-                "Fluxo simples: escreva → gerar. O app envia o prompt e inicia o Kaggle sozinho. Sem copiar e colar.",
+                "Fluxo simples: escreva → gerar → o app prepara a configuração → Kaggle abre → cole na célula CONFIGURAÇÃO → Run All → importe o MP4.",
                 muted), margin(-1, -2, 0, 8));
 
         Button save = button("Salvar rascunho como projeto", panelAlt, text);
@@ -915,116 +919,29 @@ public class MainActivity extends Activity {
         brand("Backend", "Motor de geração real");
         navBar("BACKEND");
 
-        LinearLayout kaggleDirect = card();
-        root.addView(kaggleDirect, margin(-1, -2, 0, 12));
-        label(kaggleDirect, "KAGGLE DIRETO — RECOMENDADO", cyan, 12, true);
-        kaggleDirect.addView(small(
-                "Conecte sua conta uma vez. Depois, o botão Gerar envia o prompt e inicia a GPU do Kaggle sem copiar e colar.",
+        LinearLayout kaggleManual = card();
+        root.addView(kaggleManual, margin(-1, -2, 0, 12));
+        label(kaggleManual, "KAGGLE MANUAL — RECOMENDADO", cyan, 12, true);
+        kaggleManual.addView(small(
+                "Voltamos ao método estável: o app prepara o prompt/configuração e abre o notebook. "
+                        + "Sem token, sem API de kernels, sem status remoto e sem sessões criadas pelo app.",
                 muted), margin(-1, -2, 0, 12));
 
-        sectionLabel(kaggleDirect, "USUÁRIO KAGGLE");
-        EditText kaggleUser = edit(
-                prefs.getString(KAGGLE_USERNAME, ""),
-                "Seu nome de usuário no Kaggle");
-        kaggleUser.setSingleLine(true);
-        kaggleDirect.addView(kaggleUser, margin(-1, dp(54), 0, 10));
+        Button openQuality = button(
+                "🎬 ABRIR KAGGLE QUALIDADE",
+                cyanDark, cyan);
+        openQuality.setOnClickListener(v -> openKaggleQuality());
+        kaggleManual.addView(openQuality, margin(-1, dp(54), 0, 8));
 
-        sectionLabel(kaggleDirect, "PERSONAL API TOKEN");
-        boolean hasSavedKaggleToken =
-                !prefs.getString(KAGGLE_TOKEN_ENC, "").isEmpty();
-        EditText kaggleToken = edit(
-                "",
-                hasSavedKaggleToken
-                        ? "Token salvo com segurança — deixe vazio para manter"
-                        : "Cole o token KGAT_...");
-        kaggleToken.setSingleLine(true);
-        kaggleToken.setInputType(
-                InputType.TYPE_CLASS_TEXT
-                        | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        kaggleDirect.addView(kaggleToken, margin(-1, dp(54), 0, 8));
+        Button openFast = button(
+                "🟦 ABRIR KAGGLE RÁPIDO",
+                panelAlt, text);
+        openFast.setOnClickListener(v -> openKaggleFallback());
+        kaggleManual.addView(openFast, margin(-1, dp(54), 0, 8));
 
-        kaggleDirect.addView(small(
-                "O Kaggle tem um bug conhecido na consulta de status (kernels.get). "
-                        + "Por isso o app testa só o que precisa para trabalhar com segurança: "
-                        + "criar um kernel privado SEM GPU e apagá-lo logo depois.",
-                muted), margin(-1, -2, 0, 8));
-
-        boolean connectionOk = prefs.getBoolean(KAGGLE_SCOPES_OK, false);
-        if (hasSavedKaggleToken) {
-            kaggleDirect.addView(small(
-                    connectionOk
-                            ? "✓ Kaggle pronto: criar/executar e limpar funcionam."
-                            : "⚠ Token salvo, mas o teste seguro ainda não passou.",
-                    connectionOk ? green : gold), margin(-1, -2, 0, 8));
-        }
-
-        Button openTokenSettings = button(
-                "ABRIR CONFIGURAÇÕES DE TOKEN KAGGLE",
-                panelAlt, cyan);
-        openTokenSettings.setOnClickListener(v -> {
-            try {
-                startActivity(new Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://www.kaggle.com/settings/api")));
-            } catch (Exception e) {
-                toast("Não consegui abrir as configurações do Kaggle.");
-            }
-        });
-        kaggleDirect.addView(openTokenSettings, margin(-1, dp(50), 0, 8));
-
-        Button connectKaggle = button(
-                hasSavedKaggleToken
-                        ? "✓ TESTAR KAGGLE"
-                        : "CONECTAR E TESTAR",
-                cyan, bg);
-        connectKaggle.setOnClickListener(v -> {
-            String username = kaggleUser.getText().toString().trim();
-            String enteredToken =
-                    kaggleToken.getText().toString().trim();
-
-            if (username.isEmpty()) {
-                toast("Digite seu usuário do Kaggle.");
-                return;
-            }
-
-            try {
-                prefs.edit()
-                        .putString(KAGGLE_USERNAME, username)
-                        .apply();
-
-                if (!enteredToken.isEmpty()) {
-                    saveKaggleToken(enteredToken);
-                } else if (!hasSavedKaggleToken) {
-                    toast("Cole seu Personal API Token.");
-                    return;
-                }
-            } catch (Exception e) {
-                toast("Não consegui salvar o token.");
-                return;
-            }
-
-            toast("Testando Kaggle sem usar GPU…");
-            testKaggleDirect();
-        });
-        kaggleDirect.addView(connectKaggle, margin(-1, dp(54), 0, 8));
-
-        if (hasSavedKaggleToken) {
-            Button disconnectKaggle = button(
-                    "Desconectar Kaggle",
-                    panelAlt, danger);
-            disconnectKaggle.setOnClickListener(v -> {
-                prefs.edit()
-                        .remove(KAGGLE_USERNAME)
-                        .remove(KAGGLE_KEY_ENC)
-                        .remove(KAGGLE_TOKEN_ENC)
-                        .remove(KAGGLE_TOKEN_SCOPES)
-                        .remove(KAGGLE_SCOPES_OK)
-                        .apply();
-                toast("Kaggle desconectado.");
-                showSettings();
-            });
-            kaggleDirect.addView(disconnectKaggle, margin(-1, dp(48), 0, 0));
-        }
+        kaggleManual.addView(small(
+                "Use o botão Gerar na tela Criar para copiar automaticamente a configuração correta antes de abrir o Kaggle.",
+                muted), margin(-1, -2, 0, 0));
 
         LinearLayout warning = card();
         root.addView(warning, margin(-1, -2, 0, 12));
@@ -1979,7 +1896,7 @@ public class MainActivity extends Activity {
                     .putString(RETURN_PROJECT, p.id)
                     .apply();
 
-            toast("Prompt automático pronto ✓ Cole na célula CONFIGURAÇÃO.");
+            toast("Configuração pronta ✓ Cole na célula CONFIGURAÇÃO e toque em Run All.");
             openKaggleQuality();
         } catch (Exception e) {
             toast("Não consegui preparar a configuração do Kaggle.");

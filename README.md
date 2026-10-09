@@ -1,5 +1,15 @@
 # ViniVideo AI
 
+## v0.8.7 — início de execução robusto no Kaggle
+
+- Cada geração cria um **kernel novo e único**, evitando reaproveitar drafts antigos.
+- O app verifica o campo `error` de `SaveKernel` mesmo quando o HTTP é 200.
+- Só aceita o envio quando o Kaggle confirma uma versão válida.
+- `404 No runs found for this kernel` vira **PREPARANDO** por até 2 minutos.
+- Se após 2 minutos ainda não existir execução, o app mostra erro real em vez de fingir que está gerando.
+
+
+
 ## v0.8.6 — progresso vivo durante RUNNING
 
 - A UI não depende mais de uma nova resposta do Kaggle para mexer.

@@ -1442,8 +1442,11 @@ public class MainActivity extends Activity {
         String slug =
                 "vinivideo-"
                         + p.id.substring(0, Math.min(8, p.id.length()))
-                        .toLowerCase(Locale.ROOT);
+                        .toLowerCase(Locale.ROOT)
+                        + "-"
+                        + Long.toString(System.currentTimeMillis(), 36);
         String kernelTitle = slug;
+        p.kaggleSubmittedAt = System.currentTimeMillis();
 
         p.kaggleOwner = username;
         p.kaggleSlug = slug;
@@ -1510,11 +1513,30 @@ public class MainActivity extends Activity {
 
                 String returnedUrl = "";
                 String returnedRef = "";
+                int returnedVersion = 0;
+                String saveError = "";
                 try {
                     JSONObject saved = new JSONObject(saveResponse);
                     returnedUrl = saved.optString("url", "").trim();
                     returnedRef = saved.optString("ref", "").trim();
-                } catch (Exception ignored) {}
+                    returnedVersion = saved.optInt("versionNumber", 0);
+                    if (returnedVersion == 0) {
+                        returnedVersion = saved.optInt("version_number", 0);
+                    }
+                    saveError = saved.optString("error", "").trim();
+                } catch (Exception parseError) {
+                    throw new IllegalStateException(
+                            "Resposta inválida do Kaggle ao salvar o kernel.");
+                }
+
+                if (!saveError.isEmpty()) {
+                    throw new IllegalStateException(
+                            "Kaggle recusou a execução: " + saveError);
+                }
+                if (returnedVersion <= 0) {
+                    throw new IllegalStateException(
+                            "Kaggle não confirmou uma versão executável do kernel.");
+                }
 
                 p.kaggleRef = returnedRef;
 
@@ -1552,11 +1574,10 @@ public class MainActivity extends Activity {
                     p.kaggleOutputPage = "";
                 }
 
-                p.status = "ENVIADO";
-                p.progress = 15;
-                p.stage = p.kaggleOutputPage.isEmpty()
-                        ? "Kaggle recebeu o kernel • aguardando estado real da execução"
-                        : "Kernel enviado • aguardando estado real do Kaggle";
+                p.status = "PREPARANDO";
+                p.progress = 12;
+                p.stage = "Versão " + returnedVersion
+                        + " criada • aguardando o Kaggle iniciar a sessão";
                 saveProject(p);
 
                 runOnUiThread(() -> showProject(p));
@@ -1644,9 +1665,29 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> showProject(p));
             } catch (Exception e) {
                 String error = compact(e.getMessage());
-                p.connectionWarning = error;
-                p.stage =
-                        "Não consegui ler o estado real do Kaggle agora.";
+                String lower = error.toLowerCase(Locale.ROOT);
+                long ageMs = p.kaggleSubmittedAt > 0L
+                        ? System.currentTimeMillis() - p.kaggleSubmittedAt
+                        : Long.MAX_VALUE;
+
+                if (error.contains("404")
+                        && lower.contains("no runs found")
+                        && ageMs < 120000L) {
+                    p.status = "PREPARANDO";
+                    p.progress = Math.max(12, p.progress);
+                    p.stage = "Kernel salvo • aguardando a sessão de GPU aparecer no Kaggle";
+                    p.connectionWarning = "";
+                } else if (error.contains("404")
+                        && lower.contains("no runs found")) {
+                    p.status = "ERRO";
+                    p.progress = 0;
+                    p.stage = "O Kaggle salvou o kernel, mas não iniciou nenhuma execução após 2 minutos.";
+                    p.connectionWarning = error;
+                } else {
+                    p.connectionWarning = error;
+                    p.stage =
+                            "Não consegui ler o estado real do Kaggle agora.";
+                }
                 saveProject(p);
                 runOnUiThread(() -> showProject(p));
             }
@@ -2545,6 +2586,7 @@ public class MainActivity extends Activity {
         o.put("kaggle_output_page", p.kaggleOutputPage);
         o.put("kaggle_ref", p.kaggleRef);
         o.put("kaggle_running_started_at", p.kaggleRunningStartedAt);
+        o.put("kaggle_submitted_at", p.kaggleSubmittedAt);
 
         JSONArray scenes = new JSONArray();
         for (Scene s : p.scenes) {
@@ -2588,6 +2630,8 @@ public class MainActivity extends Activity {
         p.kaggleRef = o.optString("kaggle_ref", "");
         p.kaggleRunningStartedAt =
                 o.optLong("kaggle_running_started_at", 0L);
+        p.kaggleSubmittedAt =
+                o.optLong("kaggle_submitted_at", 0L);
 
         JSONArray scenes = o.optJSONArray("scenes");
         if (scenes != null) {
@@ -3026,6 +3070,7 @@ public class MainActivity extends Activity {
         String kaggleOutputPage = "";
         String kaggleRef = "";
         long kaggleRunningStartedAt = 0L;
+        long kaggleSubmittedAt = 0L;
         final List<Scene> scenes = new ArrayList<>();
     }
 }
